@@ -560,12 +560,111 @@ void getCudaInformation(int& mps, int& cuda_cores_per_mp, int& threads_per_mp, i
     
 }
 
+void merge(float* a, int i1, int j1, int i2, int j2,int limit=-1){
+	int limit_end = limit;
+	
+	
+	float* temp = (float*) malloc((j2-i1+1) * sizeof(float));  //array used for merging
+    int i,j,k;
+    i=i1;    //beginning of the first list
+    j=i2;    //beginning of the second list
+    k=0;
+    
+    int counter = 0;
+    while(i<=j1 && j<=j2 && limit!=0)    //while elements in both lists
+    {
+		counter ++;
+		limit--;
+        if(a[i]<a[j])
+            temp[k++]=a[i++];
+        else
+            temp[k++]=a[j++];
+    }
+    
+    while(i<=j1 && limit!=0)    //copy remaining elements of the first list
+        temp[k++]=a[i++];
+        
+    while(j<=j2 && limit!=0)    //copy remaining elements of the second list
+        temp[k++]=a[j++];
+        
+    //Transfer elements from temp[] back to a[]
+    for(i=i1,j=0;i<=j2 && limit_end!=0 ;i++,j++,limit_end--)
+	{
+        a[i] = temp[j];
+    }   
+    free(temp);
+}
+
+
+void naturalMergeSort(Matrix& m, int limit=-1){
+	int m_elements = m.width*m.height;
+	
+	int slide_buffer_size = int(m_elements-0.5);
+	int* slide_buffer = (int*) malloc(slide_buffer_size * sizeof(int));
+
+	//create RUNS
+	int num_slides = 1;
+	slide_buffer[0] = 0;
+	for(int i=1; i < slide_buffer_size; i++) {
+		if(m.elements[i] < m.elements[i-1])
+		{
+			slide_buffer[num_slides] = i;
+			num_slides++;
+		}
+		
+	}
+	slide_buffer[num_slides] = m_elements;
+	slide_buffer_size = num_slides+1;
+	
+	
+	//sort 
+	int count = 0;
+	while(num_slides > 1){
+		std::cout << count+1 <<" Iteration: You can use " << int(num_slides/2) << " Threads" << std::endl;
+		int i;
+		if(num_slides>2)
+		{
+			for(i=2;i<int(num_slides+1);i+=2)
+			{
+			
+				merge(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1);
+				
+				slide_buffer[i/2-1]= slide_buffer[i-2];
+				slide_buffer[i/2]= slide_buffer[i];
+			}
+			
+			if(num_slides%2 == 1){
+				slide_buffer[i/2] = slide_buffer[num_slides];
+			}
+		}else{
+			for(i=2;i<int(num_slides+1);i+=2)
+			{
+				
+				merge(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1,limit);
+				
+				slide_buffer[i/2-1]= slide_buffer[i-2];
+				slide_buffer[i/2]= slide_buffer[i];
+			}
+			
+			if(num_slides%2 == 1){
+				slide_buffer[i/2] = slide_buffer[num_slides];
+			}
+		}
+		
+		count ++;
+		num_slides = int(num_slides/2.0+0.5);
+		
+	}
+	
+	free(slide_buffer);
+}
+
 int main(int argc, char** argv)
 {
 	
 	//plan: (T * v_points) * (T * v_points)^T 
-	int seed = 1479731956;
-	//int seed = time(NULL);
+	//int seed = 1479731956;
+	int seed = time(NULL);
 	printf("%d\n",seed);
     srand(seed);
     
@@ -651,7 +750,8 @@ int main(int argc, char** argv)
 	
 	
 	getCudaInformation(m_mps, m_cuda_cores_per_mp, m_threads_per_mp, m_threads_per_block, m_size_thread_block, m_size_grid, m_device_global_memory);
-	
+	std::cout << std::endl;
+	std::cout << "Device Information" << std::endl;
 	std::cout << "mps: " << m_mps << std::endl;
 	std::cout << "cuda_cores_per_mp: " << m_cuda_cores_per_mp << std::endl;
 	std::cout << "threads_per_mp: " << m_threads_per_mp << std::endl;
@@ -659,7 +759,29 @@ int main(int argc, char** argv)
 	std::cout << "size_thread_block: " << m_size_thread_block[0] << ", " << m_size_thread_block[1] << ", "<< m_size_thread_block[2]  << std::endl;
 	std::cout << "size_grid: " << m_size_grid[0] << ", " << m_size_grid[1] << ", "<< m_size_grid[2]  << std::endl;
 	std::cout << "device_global_memory: " << m_device_global_memory << std::endl;
+	std::cout << std::endl;
 	
+	Matrix unsortedVector;
+	unsortedVector.height = 1;
+	unsortedVector.width = 10000000;
+	unsortedVector.stride = unsortedVector.width;
+	mallocMatrix(unsortedVector);
+	fillMatrixWithRandomFloats(unsortedVector);
+	//~ printMatrix(unsortedVector);
+	
+	Matrix sortedVector;
+	sortedVector.height = 1;
+	sortedVector.width = unsortedVector.width;
+	sortedVector.stride = sortedVector.width;
+	mallocMatrix(sortedVector);
+	
+	naturalMergeSort(unsortedVector,50);
+
+	//~ std::cout << "Sorted: " << std::endl;
+	//~ printMatrix(unsortedVector);
+
+	free(unsortedVector.elements);
+	free(sortedVector.elements);
 	
 	return 0;
 }
