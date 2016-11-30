@@ -5,7 +5,7 @@
 #include "../include/helper_cuda.h"
 
 // Thread block size
-#define BLOCK_SIZE 1
+#define BLOCK_SIZE 4
 
 //DRINGEND AUSLAGERN IN HEADER
 // Matrices are stored in row-major order:
@@ -131,7 +131,7 @@ void fillHomogenMatrixWithRandomFloats(Matrix& m1){
 	for(int i=0; i<m1.height-1; i++){
 		for(int j=0;j<m1.width; j++){
 			float val = ((float)rand()/(float)(RAND_MAX)) * 10.0 -5.0;
-			m1.elements[i*m1.width+j] = int(val);
+			m1.elements[i*m1.width+j] = val;
 		}
 		
 	}
@@ -189,7 +189,7 @@ __global__ void MatMulKernel(const Matrix, const Matrix, Matrix);
 //TODO: test
 __global__ void SelfScalarKernel(const Matrix, Matrix);
 //TODO: implement
-__global__ void SortKernel(const Matrix, Matrix);
+__global__ void SortKernel(Matrix m, int limit=-1);
 
 
 
@@ -273,6 +273,78 @@ void MatMul(Matrix& A, Matrix& B, Matrix& C)
     cudaFree(d_C.elements);
 }
 
+
+
+void SelfScalar(Matrix& A, Matrix& C)
+{
+	// Load A to device memory
+	Matrix d_A;
+	d_A.width = d_A.stride = A.width; d_A.height = A.height;
+	size_t size = A.width * A.height * sizeof(float);
+	cudaMalloc(&d_A.elements, size);
+	cudaMemcpy(d_A.elements, A.elements, size,
+	       cudaMemcpyHostToDevice);         
+
+	// Allocate C in device memory
+	Matrix d_C;
+	d_C.width = d_C.stride = C.width; d_C.height = C.height;
+	size = C.width * C.height * sizeof(float);
+	cudaMalloc(&d_C.elements, size);
+
+	clock_t calcstart, calcend;
+	calcstart = clock();
+
+	// Invoke kernel
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (A.width +threadsPerBlock-1)/threadsPerBlock;
+
+	SelfScalarKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_C);
+
+	calcend=clock();
+	printf("Inner product %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+
+	// Read C from device memory
+	cudaMemcpy(C.elements, d_C.elements, size,
+	       cudaMemcpyDeviceToHost);
+
+
+	// Free device memory
+	cudaFree(d_A.elements);
+	cudaFree(d_C.elements);
+}
+
+void Sort(Matrix& A, int limit=-1)
+{
+	// Load A to device memory
+	Matrix d_A;
+	d_A.width = d_A.stride = A.width; d_A.height = A.height;
+	size_t size = A.width * A.height * sizeof(float);
+	cudaMalloc(&d_A.elements, size);
+	cudaMemcpy(d_A.elements, A.elements, size,
+	       cudaMemcpyHostToDevice);         
+
+
+	clock_t calcstart, calcend;
+	calcstart = clock();
+
+	// Invoke kernel
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (A.width +threadsPerBlock-1)/threadsPerBlock;
+
+	SortKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A,limit);
+
+	calcend=clock();
+	printf("Sorted %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+
+	// Read C from device memory
+	cudaMemcpy(A.elements, d_A.elements, size,
+	       cudaMemcpyDeviceToHost);
+
+
+	// Free device memory
+	cudaFree(d_A.elements);
+}
+
 // Matrix multiplication kernel called by MatMul()
  __global__ void MatMulKernel(Matrix A, Matrix B, Matrix C)
 {
@@ -336,80 +408,128 @@ __global__ void SelfScalarKernel(Matrix A, Matrix Dest)
 {
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
     
-    if (i < Dest.height * Dest.width)
-    {
+    	if (i < Dest.height * Dest.width)
+    	{
 		float dest=0.0;
 		int j;
-		for(j=0;j<A.width;j++)
+		for(j=0;j<A.height;j++)
 		{
-			 dest += A.elements[i*A.width+j] * A.elements[i*A.width+j];
+			 dest += A.elements[j*A.width+i] * A.elements[j*A.width+i];
 		}
-		Dest.elements[i] = dest;
+		Dest.elements[i] = dest-1;
 	}
 }
 
-__global__ void sortKernel(Matrix A, Matrix Dest){
+__device__ void merge(float* a, int i1, int j1, int i2, int j2,int limit=-1){
 	
+	int limit_end = limit;
+	
+	
+	float* temp = (float*) malloc((j2-i1+1) * sizeof(float));  //array used for merging
+    
+	//float* temp;
+	//size_t size = (j2-i1+1) * sizeof(float);
+	//cudaMalloc(temp, size);
+
+
+
+
+
+	int i,j,k;
+    i=i1;    //beginning of the first list
+    j=i2;    //beginning of the second list
+    k=0;
+    
+    int counter = 0;
+    while(i<=j1 && j<=j2 && limit!=0)    //while elements in both lists
+    {
+		counter ++;
+		limit--;
+        if(a[i]<a[j])
+            temp[k++]=a[i++];
+        else
+            temp[k++]=a[j++];
+    }
+    
+    while(i<=j1 && limit!=0)    //copy remaining elements of the first list
+        temp[k++]=a[i++];
+        
+    while(j<=j2 && limit!=0)    //copy remaining elements of the second list
+        temp[k++]=a[j++];
+        
+    //Transfer elements from temp[] back to a[]
+    for(i=i1,j=0;i<=j2 && limit_end!=0 ;i++,j++,limit_end--)
+	{
+        a[i] = temp[j];
+    }   
+    free(temp);
+	//cudaFree(temp);
 }
 
-
-void firstTry(int argc, char** argv){
-	clock_t prgstart, prgend;
-	prgstart = clock();
+__global__ void SortKernel(Matrix m, int limit){
+	//int limit = -1;
 	
-	int seed = 1479731956;
-	//int seed = time(NULL);
-	printf("%d\n",seed);
-    srand(seed);
-    
-    // ergebnis matrix: firstMatrixHeight x secondMatrixWidth
-    int firstMatrixHeight = 20;
-    int secondMatrixWidth = 20;
-    int firstSecondLength = 300;
-    if(argc > 1){
-		firstSecondLength = atoi(argv[1]);
+	
+	int m_elements = m.width*m.height;
+	
+	int slide_buffer_size = int(m_elements-0.5);
+	int* slide_buffer = (int*) malloc(slide_buffer_size * sizeof(int));
+	//int* slide_buffer;	
+	//size_t size = slide_buffer_size * sizeof(int);
+	//cudaMalloc(slide_buffer, size);
+
+	//create RUNS
+	int num_slides = 1;
+	slide_buffer[0] = 0;
+	for(int i=1; i < slide_buffer_size; i++) {
+		if(m.elements[i] < m.elements[i-1])
+		{
+			slide_buffer[num_slides] = i;
+			num_slides++;
+		}
+		
+	}
+	slide_buffer[num_slides] = m_elements;
+	slide_buffer_size = num_slides+1;
+	
+	
+	//sort 
+	int count = 0;
+	int current_limit = -1;
+	while(num_slides > 1){
+		if(num_slides > 2) {
+			current_limit = limit;
+		}
+		//std::cout << count+1 <<" Iteration: You can use " << int(num_slides/2) << " Threads" << std::endl;
+		//printf("%d Runs\n",num_slides);
+		
+		//printf("%d Iteration: You can use %d Threads\n",count,int(num_slides/2));
+		
+		
+		int i = blockDim.x * blockIdx.x + threadIdx.x;
+		if(i>=2 && i%2==0 && i<int(num_slides+1) )
+		{
+			printf("Index %d \n",i);
+			//parallelisierbar
+			merge(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1,current_limit);
+			__syncthreads();
+			slide_buffer[i/2-1]= slide_buffer[i-2];
+			slide_buffer[i/2]= slide_buffer[i];
+		}
+
+		if(num_slides%2 == 1){
+			slide_buffer[(num_slides+1)/2] = slide_buffer[num_slides];
+		}
+		
+		__syncthreads();
+		printf("%d\n",num_slides);
+		count ++;
+		num_slides = int(num_slides/2.0+0.5);
 		
 	}
 	
-	printf("%dx%d * %dx%d\n",firstSecondLength,firstMatrixHeight,secondMatrixWidth,firstSecondLength);
-	
-	Matrix hMatA;
-	hMatA.height = firstMatrixHeight;
-	hMatA.width = firstSecondLength;
-	hMatA.stride = hMatA.width;
-	mallocMatrix(hMatA);
-	fillMatrixWithRandomFloats(hMatA);
-	//printMatrix(hMatA);
-	
-	Matrix hMatB;
-	hMatB.height = firstSecondLength;
-	hMatB.width = secondMatrixWidth;
-	hMatB.stride = hMatB.width;
-	mallocMatrix(hMatB);
-	fillMatrixWithRandomFloats(hMatB);
-	//printMatrix(hMatB);
-	
-	//IMPORTANT change height and widht
-	Matrix hMatC;
-	hMatC.height = firstMatrixHeight;
-	hMatC.width = secondMatrixWidth;
-	hMatC.stride = hMatC.width;
-	mallocMatrix(hMatC);
-	
-	
-	printf("MULTIPLY!\n");
-	MatMul( hMatA,hMatB, hMatC);
-	
-	
-	//printMatrix(hMatC);
-	
-	free(hMatA.elements);
-	free(hMatB.elements);
-	free(hMatC.elements);
-	
-	prgend=clock();
-	printf("Laufzeit insgesamt %f seconds\n",(float)(prgend-prgstart) / CLOCKS_PER_SEC);
-	
+	free(slide_buffer);
+	//cudaFree(slide_buffer);
 }
 
 void printDeviceInformation()
@@ -560,7 +680,7 @@ void getCudaInformation(int& mps, int& cuda_cores_per_mp, int& threads_per_mp, i
     
 }
 
-void merge(float* a, int i1, int j1, int i2, int j2,int limit=-1){
+void mergeHost(float* a, int i1, int j1, int i2, int j2,int limit=-1){
 	int limit_end = limit;
 	
 	
@@ -626,8 +746,8 @@ void naturalMergeSort(Matrix& m, int limit=-1){
 		{
 			for(i=2;i<int(num_slides+1);i+=2)
 			{
-			
-				merge(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1);
+				//parallelisierbar
+				mergeHost(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1);
 				
 				slide_buffer[i/2-1]= slide_buffer[i-2];
 				slide_buffer[i/2]= slide_buffer[i];
@@ -639,8 +759,8 @@ void naturalMergeSort(Matrix& m, int limit=-1){
 		}else{
 			for(i=2;i<int(num_slides+1);i+=2)
 			{
-				
-				merge(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1,limit);
+				//parallelisierbar
+				mergeHost(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1,limit);
 				
 				slide_buffer[i/2-1]= slide_buffer[i-2];
 				slide_buffer[i/2]= slide_buffer[i];
@@ -661,14 +781,25 @@ void naturalMergeSort(Matrix& m, int limit=-1){
 
 int main(int argc, char** argv)
 {
+	getCudaInformation(m_mps, m_cuda_cores_per_mp, m_threads_per_mp, m_threads_per_block, m_size_thread_block, m_size_grid, m_device_global_memory);
+	std::cout << std::endl;
+	std::cout << "Device Information" << std::endl;
+	std::cout << "mps: " << m_mps << std::endl;
+	std::cout << "cuda_cores_per_mp: " << m_cuda_cores_per_mp << std::endl;
+	std::cout << "threads_per_mp: " << m_threads_per_mp << std::endl;
+	std::cout << "threads_per_block: " << m_threads_per_block << std::endl;
+	std::cout << "size_thread_block: " << m_size_thread_block[0] << ", " << m_size_thread_block[1] << ", "<< m_size_thread_block[2]  << std::endl;
+	std::cout << "size_grid: " << m_size_grid[0] << ", " << m_size_grid[1] << ", "<< m_size_grid[2]  << std::endl;
+	std::cout << "device_global_memory: " << m_device_global_memory << std::endl;
+	std::cout << std::endl;
 	
 	//plan: (T * v_points) * (T * v_points)^T 
 	//int seed = 1479731956;
 	int seed = time(NULL);
 	printf("%d\n",seed);
-    srand(seed);
+    	srand(seed);
     
-	//point vector
+	//point vector ALLE PUNKTE
 	Matrix V;
 	V.height = 4;
 	V.width = 100;
@@ -676,6 +807,15 @@ int main(int argc, char** argv)
 	V.stride = V.width;
 	mallocMatrix(V);
 	fillHomogenMatrixWithRandomFloats(V);
+
+	Matrix last_point_V;
+	last_point_V.height = 4;
+	last_point_V.width = 1;
+	last_point_V.stride = last_point_V.width;
+	mallocMatrix(last_point_V);
+	getColVecOfMatrix(V,V.width-1,last_point_V);
+	// Matrix initialized
+	printMatrix(last_point_V);
 	
 	//point index for searching
 	int index = 0;
@@ -698,6 +838,7 @@ int main(int argc, char** argv)
 	T.stride = T.width;
 	mallocMatrix(T);
 	fill3DTranslationMatrixRightCol(T,-nn_point.elements[0],-nn_point.elements[1],-nn_point.elements[2]);
+	// Transformation matrix initialized
 	
 	
 	Matrix V1;
@@ -710,60 +851,78 @@ int main(int argc, char** argv)
 	//printMatrix(T);
 	//printMatrix(V);
 	
+	// Transformation
+	// auf großen punktmengen geht das nicht mehr
 	MatMul(T,V,V1);
+
+	Matrix last_point_V1;
+	last_point_V1.height = 4;
+	last_point_V1.width = 1;
+	last_point_V1.stride = last_point_V1.width;
+	mallocMatrix(last_point_V1);
+	getColVecOfMatrix(V1,V1.width-1,last_point_V1);
+	// Matrix initialized
+	printMatrix(last_point_V1);
 	
 	//self multiplication
-	Matrix Vtransposed;
-	Vtransposed.height = V1.width;
-	Vtransposed.width = V1.height;
-	Vtransposed.stride = Vtransposed.width;
-	mallocMatrix(Vtransposed);
-	transposeMatrix(V1,Vtransposed);
+	//Matrix Vtransposed;
+	//Vtransposed.height = V1.width;
+	//Vtransposed.width = V1.height;
+	//Vtransposed.stride = Vtransposed.width;
+	//mallocMatrix(Vtransposed);
+	//transposeMatrix(V1,Vtransposed);
 	
+	Matrix V2;
+	V2.height = 1;
+	V2.width = V1.width;
+	V2.stride = V2.width;
+	mallocMatrix(V2);
+
+	// Snow Shovel
+	SelfScalar(V1, V2);
+
+
+	Matrix last_point;
+	last_point.height = 4;
+	last_point.width = 1;
+	last_point.stride = last_point.width;
+	mallocMatrix(last_point);
+	getColVecOfMatrix(V1,V1.width-1,last_point);
 	
-	
-	Matrix Weights;
-	Weights.height = Vtransposed.height;
-	Weights.width = V1.width;
-	Weights.stride = Vtransposed.width;
-	mallocMatrix(Weights);
+
+	printMatrix(last_point);
+	std::cout << "scalar: " << V2.elements[V2.width*V2.height-1] << std::endl;
+	//printMatrix(V1);
+	//printMatrix(V2);	
+
+	//Matrix Weights;
+	//Weights.height = Vtransposed.height;
+	//Weights.width = V1.width;
+	//Weights.stride = Vtransposed.width;
+	//mallocMatrix(Weights);
 	
 	
 	//printMatrix(Vtransposed);
 	//printMatrix(V1);
 	
-	MatMul(Vtransposed,V1,Weights);
+	//MatMul(Vtransposed,V1,Weights);
 	//std::cout << "last Weight" << Weights.elements[0] << std::endl;
 	//std::cout << "last Weight " << Weights.elements[Weights.width*Weights.height-1] << std::endl;
 	
 	//diagonal is distance
 	//printMatrix(Weights);
 	
-	free(V.elements);
-	free(Vtransposed.elements);
-	free(T.elements);
-	free(V1.elements);
-	free(nn_point.elements);
+	
 	
 	//printDeviceInformation();
 	
 	
 	
-	getCudaInformation(m_mps, m_cuda_cores_per_mp, m_threads_per_mp, m_threads_per_block, m_size_thread_block, m_size_grid, m_device_global_memory);
-	std::cout << std::endl;
-	std::cout << "Device Information" << std::endl;
-	std::cout << "mps: " << m_mps << std::endl;
-	std::cout << "cuda_cores_per_mp: " << m_cuda_cores_per_mp << std::endl;
-	std::cout << "threads_per_mp: " << m_threads_per_mp << std::endl;
-	std::cout << "threads_per_block: " << m_threads_per_block << std::endl;
-	std::cout << "size_thread_block: " << m_size_thread_block[0] << ", " << m_size_thread_block[1] << ", "<< m_size_thread_block[2]  << std::endl;
-	std::cout << "size_grid: " << m_size_grid[0] << ", " << m_size_grid[1] << ", "<< m_size_grid[2]  << std::endl;
-	std::cout << "device_global_memory: " << m_device_global_memory << std::endl;
-	std::cout << std::endl;
+	
 	
 	Matrix unsortedVector;
 	unsortedVector.height = 1;
-	unsortedVector.width = 10000000;
+	unsortedVector.width = 1000;
 	unsortedVector.stride = unsortedVector.width;
 	mallocMatrix(unsortedVector);
 	fillMatrixWithRandomFloats(unsortedVector);
@@ -775,13 +934,23 @@ int main(int argc, char** argv)
 	sortedVector.stride = sortedVector.width;
 	mallocMatrix(sortedVector);
 	
-	naturalMergeSort(unsortedVector,50);
+	//naturalMergeSort(V2,50);
 
+	Sort(V2,50);
 	//~ std::cout << "Sorted: " << std::endl;
-	//~ printMatrix(unsortedVector);
+	printMatrix(V2);
 
 	free(unsortedVector.elements);
 	free(sortedVector.elements);
+	free(V.elements);
+	//free(Vtransposed.elements);
+	free(T.elements);
+	free(V1.elements);
+	free(V2.elements);
+	free(last_point.elements);
+	free(last_point_V.elements);
+	free(last_point_V1.elements);
+	free(nn_point.elements);
 	
 	return 0;
 }
