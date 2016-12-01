@@ -27,6 +27,7 @@ int* m_size_thread_block = new int(3);
 int* m_size_grid = new int(3);
 unsigned long long m_device_global_memory = 0;
 
+using namespace std;
 
 /// std::vector helper methods 
 
@@ -158,7 +159,7 @@ void fillMatrixWithRandomFloats(Matrix& m)
 	//int j;
 	for(i=0;i<m.height*m.width;i++)
 	{
-		*(m.elements + i ) = ((float)rand()/(float)(RAND_MAX)) * 1000.0 ;
+		*(m.elements + i ) = (int)(((float)rand()/(float)(RAND_MAX)) * 10.0 - 5.0);
 	}
 }
 
@@ -832,36 +833,34 @@ int main(int argc, char** argv)
     
 	//point vector ALLE PUNKTE
 	Matrix V;
-	V.height = 4;
-	V.width = 10;
+	V.height = 3;
+	V.width = 50000000;
 	std::cout << "points " << V.width << std::endl; 
 	V.stride = V.width;
 	mallocMatrix(V);
-	fillHomogenMatrixWithRandomFloats(V);
-	printMatrix(V);
-	
+	fillMatrixWithRandomFloats(V);
+	//printMatrix(V);
 	
 	Matrix last_point_V;
-	last_point_V.height = 4;
+	last_point_V.height = 3;
 	last_point_V.width = 1;
 	last_point_V.stride = last_point_V.width;
 	mallocMatrix(last_point_V);
 	getColVecOfMatrix(V,V.width-1,last_point_V);
 	// Matrix initialized
-	//printMatrix(last_point_V);
+	printMatrix(last_point_V);
 	
 	//point index for searching
 	int index = 1;
 	
 	//point for searchings
 	Matrix nn_point;
-	nn_point.height = 4;
+	nn_point.height = 3;
 	nn_point.width = 1;
 	nn_point.stride = nn_point.width;
 	mallocMatrix(nn_point);
 	getColVecOfMatrix(V,index,nn_point);
 	std::cout << "pic point " << index << std::endl;
-	//printMatrix(nn_point);
 	printMatrix(nn_point);
 	//neue variante ohne transformation
 	Matrix distance_vec;
@@ -871,23 +870,25 @@ int main(int argc, char** argv)
 	mallocMatrix(distance_vec);
 	
 	Distances(V,nn_point,distance_vec);
-	printMatrix(distance_vec);
+	//printMatrix(distance_vec);
 	
+	cout << distance_vec.elements[distance_vec.width-1] << endl;
+
 	//transformation with point
-	Matrix T;
-	T.height = 4;
-	T.width = 4;
-	T.stride = T.width;
-	mallocMatrix(T);
-	fill3DTranslationMatrixRightCol(T,-nn_point.elements[0],-nn_point.elements[1],-nn_point.elements[2]);
+	//Matrix T;
+	//T.height = 4;
+	//T.width = 4;
+	//T.stride = T.width;
+	//mallocMatrix(T);
+	//fill3DTranslationMatrixRightCol(T,-nn_point.elements[0],-nn_point.elements[1],-nn_point.elements[2]);
 	// Transformation matrix initialized
 	
 	
-	Matrix V1;
-	V1.height = V.height;
-	V1.width = V.width;
-	V1.stride = V1.width;
-	mallocMatrix(V1);
+	//Matrix V1;
+	//V1.height = V.height;
+	//V1.width = V.width;
+	//V1.stride = V1.width;
+	//mallocMatrix(V1);
 	
 	
 	//printMatrix(T);
@@ -895,16 +896,16 @@ int main(int argc, char** argv)
 	
 	// Transformation
 	// auf großen punktmengen geht das nicht mehr
-	MatMul(T,V,V1);
+	//MatMul(T,V,V1);
 
-	Matrix last_point_V1;
-	last_point_V1.height = 4;
-	last_point_V1.width = 1;
-	last_point_V1.stride = last_point_V1.width;
-	mallocMatrix(last_point_V1);
-	getColVecOfMatrix(V1,V1.width-1,last_point_V1);
+	//Matrix last_point_V1;
+	//last_point_V1.height = 3;
+	//last_point_V1.width = 1;
+	//last_point_V1.stride = last_point_V1.width;
+	//mallocMatrix(last_point_V1);
+	//getColVecOfMatrix(V1,V1.width-1,last_point_V1);
 	// Matrix initialized
-	printMatrix(last_point_V1);
+	//printMatrix(last_point_V1);
 	
 	//self multiplication
 	//Matrix Vtransposed;
@@ -914,26 +915,26 @@ int main(int argc, char** argv)
 	//mallocMatrix(Vtransposed);
 	//transposeMatrix(V1,Vtransposed);
 	
-	Matrix V2;
-	V2.height = 1;
-	V2.width = V1.width;
-	V2.stride = V2.width;
-	mallocMatrix(V2);
+	//Matrix V2;
+	//V2.height = 1;
+	//V2.width = V1.width;
+	//V2.stride = V2.width;
+	//mallocMatrix(V2);
 
 	// Snow Shovel
-	SelfScalar(V1, V2);
+	//SelfScalar(V1, V2);
 
 
-	Matrix last_point;
-	last_point.height = 4;
-	last_point.width = 1;
-	last_point.stride = last_point.width;
-	mallocMatrix(last_point);
-	getColVecOfMatrix(V1,V1.width-1,last_point);
+	//Matrix last_point;
+	//last_point.height = 4;
+	//last_point.width = 1;
+	//last_point.stride = last_point.width;
+	//mallocMatrix(last_point);
+	//getColVecOfMatrix(V1,V1.width-1,last_point);
 	
 
-	printMatrix(last_point);
-	std::cout << "scalar: " << V2.elements[V2.width*V2.height-1] << std::endl;
+	//printMatrix(last_point);
+	//std::cout << "scalar: " << V2.elements[V2.width*V2.height-1] << std::endl;
 	
 	
 	
@@ -943,17 +944,17 @@ int main(int argc, char** argv)
 
 	Matrix sortedVector;
 	sortedVector.height = 1;
-	sortedVector.width = V2.width;
+	sortedVector.width = distance_vec.width;
 	sortedVector.stride = sortedVector.width;
 	mallocMatrix(sortedVector);
 
-	printMatrix(V2);
+	//printMatrix(distance_vec);
 	
-	Sort(V2,sortedVector);
+	Sort(distance_vec,sortedVector);
 	
 	//std::cout << "Sorted Last Point: " << sortedVector.elements[sortedVector.width*sortedVector.height-1] << std::endl;
 	//printMatrix(V2);
-	printMatrix(sortedVector);
+	//printMatrix(sortedVector);
 
 	//Sort(sortedVector,sortedVector);
 	//Sort(sortedVector,sortedVector);
@@ -1001,12 +1002,12 @@ int main(int argc, char** argv)
 	free(sortedVector.elements);
 	free(V.elements);
 	//free(Vtransposed.elements);
-	free(T.elements);
-	free(V1.elements);
-	free(V2.elements);
-	free(last_point.elements);
-	free(last_point_V.elements);
-	free(last_point_V1.elements);
+	//free(T.elements);
+	//free(V1.elements);
+	//free(V2.elements);
+	//free(last_point.elements);
+	//free(last_point_V.elements);
+	//free(last_point_V1.elements);
 	free(nn_point.elements);
 	
 	return 0;
