@@ -2,10 +2,12 @@
 #include <stdlib.h>
 #include <iostream>
 #include <vector>
+#include <math.h>
 #include "../include/helper_cuda.h"
 
 // Thread block size
-#define BLOCK_SIZE 4
+#define BLOCK_SIZE 1
+#define NUM 1024
 
 //DRINGEND AUSLAGERN IN HEADER
 // Matrices are stored in row-major order:
@@ -156,7 +158,7 @@ void fillMatrixWithRandomFloats(Matrix& m)
 	//int j;
 	for(i=0;i<m.height*m.width;i++)
 	{
-		*(m.elements + i ) = ((float)rand()/(float)(RAND_MAX)) * 10.0 -5.0 ;
+		*(m.elements + i ) = ((float)rand()/(float)(RAND_MAX)) * 1000.0 ;
 	}
 }
 
@@ -189,7 +191,12 @@ __global__ void MatMulKernel(const Matrix, const Matrix, Matrix);
 //TODO: test
 __global__ void SelfScalarKernel(const Matrix, Matrix);
 //TODO: implement
-__global__ void SortKernel(Matrix m, int limit=-1);
+__global__ static void MergeSort(Matrix m, Matrix results);
+//TODO: implement
+__global__ static void SortKernel(Matrix m, int limit=-1);
+
+
+__global__ void DistanceKernel(const Matrix A, const Matrix B, Matrix dest);
 
 
 
@@ -274,7 +281,7 @@ void MatMul(Matrix& A, Matrix& B, Matrix& C)
 }
 
 
-
+//first transform
 void SelfScalar(Matrix& A, Matrix& C)
 {
 	// Load A to device memory
@@ -313,7 +320,8 @@ void SelfScalar(Matrix& A, Matrix& C)
 	cudaFree(d_C.elements);
 }
 
-void Sort(Matrix& A, int limit=-1)
+// without transform
+void Distances(Matrix& A, Matrix& B, Matrix& C)
 {
 	// Load A to device memory
 	Matrix d_A;
@@ -323,6 +331,19 @@ void Sort(Matrix& A, int limit=-1)
 	cudaMemcpy(d_A.elements, A.elements, size,
 	       cudaMemcpyHostToDevice);         
 
+	
+	Matrix d_B;
+	d_B.width = d_B.stride = B.width; d_B.height = B.height;
+	size = B.width * B.height * sizeof(float);
+	cudaMalloc(&d_B.elements, size);
+	cudaMemcpy(d_B.elements, B.elements, size,
+	       cudaMemcpyHostToDevice);         
+
+	// Allocate C in device memory
+	Matrix d_C;
+	d_C.width = d_C.stride = C.width; d_C.height = C.height;
+	size = C.width * C.height * sizeof(float);
+	cudaMalloc(&d_C.elements, size);
 
 	clock_t calcstart, calcend;
 	calcstart = clock();
@@ -331,18 +352,73 @@ void Sort(Matrix& A, int limit=-1)
 	int threadsPerBlock = m_threads_per_block;
 	int blocksPerGrid = (A.width +threadsPerBlock-1)/threadsPerBlock;
 
-	SortKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A,limit);
+	DistanceKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C);
 
-	calcend=clock();
-	printf("Sorted %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+	calcend = clock();
+	printf("Distance calculation %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
 
 	// Read C from device memory
-	cudaMemcpy(A.elements, d_A.elements, size,
+	cudaMemcpy(C.elements, d_C.elements, size,
 	       cudaMemcpyDeviceToHost);
 
 
 	// Free device memory
 	cudaFree(d_A.elements);
+	cudaFree(d_B.elements);
+	cudaFree(d_C.elements);
+}
+
+
+
+void Sort(Matrix& A, Matrix& B)
+{
+	// Load A to device memory
+	Matrix d_A;
+	d_A.width = d_A.stride = A.width; d_A.height = A.height;
+	size_t size = A.width * A.height * sizeof(float);
+	cudaMalloc(&d_A.elements, size);
+	cudaMemcpy(d_A.elements, A.elements, size, cudaMemcpyHostToDevice);         
+
+	// Load A to device memory
+	Matrix d_B;
+	d_B.width = d_B.stride = A.width; d_B.height = A.height;
+	cudaMalloc(&d_B.elements, size);
+	//cudaMemcpy(d_B.elements, A.elements, size, cudaMemcpyHostToDevice);         
+    
+        
+	
+	
+	
+
+	clock_t calcstart, calcend;
+	calcstart = clock();
+	// Invoke kernel
+	int A_size = A.width*A.height;
+	//~ int threadsPerBlock = m_threads_per_block;
+	//~ int blocksPerGrid = (A.width +threadsPerBlock-1)/threadsPerBlock;
+	//~ MergeSort<<<1,A_size>>>(d_A,d_B);
+	
+	//~ int A_size = A.width*A.height;
+	//MergeSort<<<1, A_size, sizeof(float)*A_size*2>>>(d_A,d_B);
+	//~ int sort_iterations = log(A_size)/log(2);
+	//~ std::cout << sort_iterations << std::endl;
+	//~ for(int i=0;i<sort_iterations;i++)
+	//~ {
+		SortKernel<<<1,  A_size, sizeof(float) * A_size * 2 >>>(d_A);
+	//~ }
+
+
+	calcend=clock();
+	printf("Sorted %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+
+	// Read C from device memory
+	//cudaMemcpy(B.elements, d_B.elements, size, cudaMemcpyDeviceToHost);
+	cudaMemcpy(B.elements, d_A.elements, size, cudaMemcpyDeviceToHost);
+	
+
+	// Free device memory
+	cudaFree(d_A.elements);
+	cudaFree(d_B.elements);
 }
 
 // Matrix multiplication kernel called by MatMul()
@@ -403,7 +479,7 @@ void Sort(Matrix& A, int limit=-1)
     SetElement(Csub, row, col, Cvalue);
 }
 
-
+//first distance function after transformation
 __global__ void SelfScalarKernel(Matrix A, Matrix Dest)
 {
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
@@ -420,244 +496,210 @@ __global__ void SelfScalarKernel(Matrix A, Matrix Dest)
 	}
 }
 
-__device__ void merge(float* a, int i1, int j1, int i2, int j2,int limit=-1){
+//distance function without transformation
+__global__ void DistanceKernel(const Matrix points,const Matrix s_point, Matrix dest)
+{
+	const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
 	
-	int limit_end = limit;
+	int num_points = points.width;
+	if(tid < num_points)
+	{
+		dest.elements[tid] = (points.elements[tid + 0 * points.width] - s_point.elements[0]) * (points.elements[tid + 0 * points.width] - s_point.elements[0]) 
+								+ (points.elements[tid + 1 * points.width] - s_point.elements[1]) * (points.elements[tid + 1 * points.width] - s_point.elements[1])
+								+ (points.elements[tid + 2 * points.width] - s_point.elements[2]) * (points.elements[tid + 2 * points.width] - s_point.elements[2]) ; 
+	}
+}
+
+__device__ inline void Merge2(float* a, int i1, int j1, int i2, int j2,int limit=-1){
+	
 	
 	
 	float* temp = (float*) malloc((j2-i1+1) * sizeof(float));  //array used for merging
-    
-	//float* temp;
-	//size_t size = (j2-i1+1) * sizeof(float);
-	//cudaMalloc(temp, size);
-
-
-
-
-
-	int i,j,k;
+    int i,j,k;
     i=i1;    //beginning of the first list
     j=i2;    //beginning of the second list
     k=0;
     
     int counter = 0;
-    while(i<=j1 && j<=j2 && limit!=0)    //while elements in both lists
+    while(i<=j1 && j<=j2 )    //while elements in both lists
     {
 		counter ++;
-		limit--;
         if(a[i]<a[j])
             temp[k++]=a[i++];
         else
             temp[k++]=a[j++];
     }
     
-    while(i<=j1 && limit!=0)    //copy remaining elements of the first list
+    while(i<=j1 )    //copy remaining elements of the first list
         temp[k++]=a[i++];
         
-    while(j<=j2 && limit!=0)    //copy remaining elements of the second list
+    while(j<=j2 )    //copy remaining elements of the second list
         temp[k++]=a[j++];
         
     //Transfer elements from temp[] back to a[]
-    for(i=i1,j=0;i<=j2 && limit_end!=0 ;i++,j++,limit_end--)
+    for(i=i1,j=0;i<=j2 ;i++,j++)
 	{
         a[i] = temp[j];
     }   
     free(temp);
-	//cudaFree(temp);
 }
 
-__global__ void SortKernel(Matrix m, int limit){
-	//int limit = -1;
+__device__ inline void Merge(float* values, float* results, int l, int r, int u)
+{
+	int i,j,k;
+	i=l; j=r; k=l;
+	while(i<r && j<u){
+		if(values[i]<=values[j])
+		{
+			results[k] = values[i];
+			i++;
+		}else{
+			results[k] = values[j];
+			j++;
+		}
+		k++;
+	}
 	
+	while(i<r){
+		results[k] = values[i];
+		i++;
+		k++;
+	}
+	
+	while(j<u){
+		results[k] = values[j];
+		j++;
+		k++;
+	}
+	
+	for(k=l;k<u;k++){
+		values[k]=results[k];
+	}
+	
+}
+
+__global__ static void MergeSort(Matrix m, Matrix results){
+	
+	extern __shared__ float shared[];
+	
+	//const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
+	const unsigned int tid =  threadIdx.x;
+	//const unsigned int tid = blockIdx.x;
+	int k,u,i;
+	
+	int m_size = m.width*m.height;
+	
+	
+	shared[tid] = m.elements[tid];
+	
+	__syncthreads();
+	
+	k=1;
+	while(k < m_size)
+	{
+		i=0;
+		while(i+k<m_size)
+		{
+			u = i+k*2;
+			if(u > m_size)
+			{
+				u = m_size;
+			}
+			//printf("%d %d %d \n",i,k,u);
+			Merge(shared,results.elements, i,i+k, u);
+			i = i+k*2;
+		}
+		k = k*2;
+		__syncthreads();
+		//printf("Iter %d\n",i);
+	}
+	
+	m.elements[tid] = shared[tid];
+}
+
+__global__ static void SortKernel(Matrix m, int limit){
 	
 	int m_elements = m.width*m.height;
 	
 	int slide_buffer_size = int(m_elements-0.5);
+	
+	extern __shared__ int buffer[];
+	extern __shared__ float values[];
+	__shared__ int check_runs;
+	__shared__ int num_runs;
+	
+	
+	check_runs=0;
+	
 	int* slide_buffer = (int*) malloc(slide_buffer_size * sizeof(int));
-	//int* slide_buffer;	
-	//size_t size = slide_buffer_size * sizeof(int);
-	//cudaMalloc(slide_buffer, size);
 
 	//create RUNS
-	int num_slides = 1;
+	int num_slides=1;
 	slide_buffer[0] = 0;
-	for(int i=1; i < slide_buffer_size; i++) {
-		if(m.elements[i] < m.elements[i-1])
+	for(int x=1; x < slide_buffer_size && check_runs==0; x++) {
+		if(m.elements[x] < m.elements[x-1])
 		{
-			slide_buffer[num_slides] = i;
+			slide_buffer[num_slides] = x;
+			buffer[num_slides] = x;
 			num_slides++;
 		}
 		
 	}
-	slide_buffer[num_slides] = m_elements;
-	slide_buffer_size = num_slides+1;
+	__syncthreads();
+	if(check_runs == 0){
+		check_runs=1;
+		num_runs = num_slides;
+		
+		slide_buffer[num_slides] = m_elements;
+		slide_buffer_size = num_slides+1;
+		
 	
-	
-	//sort 
-	int count = 0;
-	int current_limit = -1;
-	while(num_slides > 1){
-		if(num_slides > 2) {
-			current_limit = limit;
-		}
-		//std::cout << count+1 <<" Iteration: You can use " << int(num_slides/2) << " Threads" << std::endl;
-		//printf("%d Runs\n",num_slides);
-		
-		//printf("%d Iteration: You can use %d Threads\n",count,int(num_slides/2));
-		
-		
-		int i = blockDim.x * blockIdx.x + threadIdx.x;
-		if(i>=2 && i%2==0 && i<int(num_slides+1) )
-		{
-			printf("Index %d \n",i);
-			//parallelisierbar
-			merge(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1,current_limit);
+		//sort 
+		int count = 0;
+		int current_limit = -1;
+		while(num_slides > 1){
+			//__syncthreads();
+			if(num_slides <= 2){
+				current_limit = limit;
+			}
+			const unsigned int i =  threadIdx.x;
+			//printf("%d\n",i);
+			
+			if(i>=2 && i<int(num_slides+1) && i%2==0 ) 
+			{
+				printf("numslides %d , index %d\n",num_slides,i);
+				//parallelisierbar
+				//__syncthreads();
+				Merge2(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1,current_limit);
+				//~ Merge2(m.elements, buffer[i-2], buffer[i-1]-1, buffer[i-1], buffer[i]-1,current_limit);
+				
+			}
+			
 			__syncthreads();
-			slide_buffer[i/2-1]= slide_buffer[i-2];
-			slide_buffer[i/2]= slide_buffer[i];
-		}
-
-		if(num_slides%2 == 1){
-			slide_buffer[(num_slides+1)/2] = slide_buffer[num_slides];
-		}
+			
+			if(i>=2 && i<int(num_slides+1) && i%2 == 0 ) 
+			{
+				slide_buffer[i/2-1]= slide_buffer[i-2];
+				slide_buffer[i/2]= slide_buffer[i];
+			}
+			
+			__syncthreads();
 		
-		__syncthreads();
-		printf("%d\n",num_slides);
-		count ++;
-		num_slides = int(num_slides/2.0+0.5);
+			
+			if(num_slides%2 == 1){
+				slide_buffer[(num_slides+1)/2] = slide_buffer[num_slides];
+			}
+			
+			count ++;
+			num_slides = int(num_slides/2.0+0.5);
+			
+			
+		}
 		
 	}
 	
+	
 	free(slide_buffer);
-	//cudaFree(slide_buffer);
-}
-
-void printDeviceInformation()
-{
-	int deviceCount = 0;
-    cudaError_t error_id = cudaGetDeviceCount(&deviceCount);
-
-    if (error_id != cudaSuccess)
-    {
-        printf("cudaGetDeviceCount returned %d\n-> %s\n", (int)error_id, cudaGetErrorString(error_id));
-        printf("Result = FAIL\n");
-        exit(EXIT_FAILURE);
-    }
-
-    // This function call returns 0 if there are no CUDA capable devices.
-    if (deviceCount == 0)
-    {
-        printf("There are no available device(s) that support CUDA\n");
-    }
-    else
-    {
-        printf("Detected %d CUDA Capable device(s)\n", deviceCount);
-    }
-    
-    int dev, driverVersion = 0, runtimeVersion = 0;
-
-    for (dev = 0; dev < deviceCount; ++dev)
-    {
-        cudaSetDevice(dev);
-        cudaDeviceProp deviceProp;
-        cudaGetDeviceProperties(&deviceProp, dev);
-
-        //printf("\nDevice %d: \"%s\"\n", dev, deviceProp.name);
-
-        // Console log
-        cudaDriverGetVersion(&driverVersion);
-        cudaRuntimeGetVersion(&runtimeVersion);
-        //printf("  CUDA Driver Version / Runtime Version          %d.%d / %d.%d\n", driverVersion/1000, (driverVersion%100)/10, runtimeVersion/1000, (runtimeVersion%100)/10);
-        //~ printf("  CUDA Capability Major/Minor version number:    %d.%d\n", deviceProp.major, deviceProp.minor);
-
-        char msg[256];
-        SPRINTF(msg, "  Total amount of global memory:                 %.0f MBytes (%llu bytes)\n",
-                (float)deviceProp.totalGlobalMem/1048576.0f, (unsigned long long) deviceProp.totalGlobalMem);
-        printf("%s", msg);
-
-        printf("  (%2d) Multiprocessors, (%3d) CUDA Cores/MP:     %d CUDA Cores\n",
-               deviceProp.multiProcessorCount,
-               _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor),
-               _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor) * deviceProp.multiProcessorCount);
-        //printf("  GPU Max Clock rate:                            %.0f MHz (%0.2f GHz)\n", deviceProp.clockRate * 1e-3f, deviceProp.clockRate * 1e-6f);
-
-
-#if CUDART_VERSION >= 5000
-        // This is supported in CUDA 5.0 (runtime API device properties)
-        //printf("  Memory Clock rate:                             %.0f Mhz\n", deviceProp.memoryClockRate * 1e-3f);
-        //printf("  Memory Bus Width:                              %d-bit\n",   deviceProp.memoryBusWidth);
-
-        //if (deviceProp.l2CacheSize)
-        //{
-        //    printf("  L2 Cache Size:                                 %d bytes\n", deviceProp.l2CacheSize);
-        //}
-
-#else
-        // This only available in CUDA 4.0-4.2 (but these were only exposed in the CUDA Driver API)
-        //int memoryClock;
-        //getCudaAttribute<int>(&memoryClock, CU_DEVICE_ATTRIBUTE_MEMORY_CLOCK_RATE, dev);
-        //printf("  Memory Clock rate:                             %.0f Mhz\n", memoryClock * 1e-3f);
-        //int memBusWidth;
-        //getCudaAttribute<int>(&memBusWidth, CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH, dev);
-        //printf("  Memory Bus Width:                              %d-bit\n", memBusWidth);
-        //int L2CacheSize;
-        //getCudaAttribute<int>(&L2CacheSize, CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE, dev);
-
-        //if (L2CacheSize)
-        //{
-        //    printf("  L2 Cache Size:                                 %d bytes\n", L2CacheSize);
-        //}
-
-#endif
-		//~ printf("  Maximum Texture Dimension Size (x,y,z)         1D=(%d), 2D=(%d, %d), 3D=(%d, %d, %d)\n",
-               //~ deviceProp.maxTexture1D   , deviceProp.maxTexture2D[0], deviceProp.maxTexture2D[1],
-               //~ deviceProp.maxTexture3D[0], deviceProp.maxTexture3D[1], deviceProp.maxTexture3D[2]);
-        //~ printf("  Maximum Layered 1D Texture Size, (num) layers  1D=(%d), %d layers\n",
-               //~ deviceProp.maxTexture1DLayered[0], deviceProp.maxTexture1DLayered[1]);
-        //~ printf("  Maximum Layered 2D Texture Size, (num) layers  2D=(%d, %d), %d layers\n",
-               //~ deviceProp.maxTexture2DLayered[0], deviceProp.maxTexture2DLayered[1], deviceProp.maxTexture2DLayered[2]);
-
-
-        printf("  Total amount of constant memory:               %lu bytes\n", deviceProp.totalConstMem);
-        printf("  Total amount of shared memory per block:       %lu bytes\n", deviceProp.sharedMemPerBlock);
-        printf("  Total number of registers available per block: %d\n", deviceProp.regsPerBlock);
-        //~ printf("  Warp size:                                     %d\n", deviceProp.warpSize);
-        printf("  Maximum number of threads per multiprocessor:  %d\n", deviceProp.maxThreadsPerMultiProcessor);
-        printf("  Maximum number of threads per block:           %d\n", deviceProp.maxThreadsPerBlock);
-        printf("  Max dimension size of a thread block (x,y,z): (%d, %d, %d)\n",
-               deviceProp.maxThreadsDim[0],
-               deviceProp.maxThreadsDim[1],
-               deviceProp.maxThreadsDim[2]);
-        printf("  Max dimension size of a grid size    (x,y,z): (%d, %d, %d)\n",
-               deviceProp.maxGridSize[0],
-               deviceProp.maxGridSize[1],
-               deviceProp.maxGridSize[2]);
-        //~ printf("  Maximum memory pitch:                          %lu bytes\n", deviceProp.memPitch);
-        //~ printf("  Texture alignment:                             %lu bytes\n", deviceProp.textureAlignment);
-        //~ printf("  Concurrent copy and kernel execution:          %s with %d copy engine(s)\n", (deviceProp.deviceOverlap ? "Yes" : "No"), deviceProp.asyncEngineCount);
-        //~ printf("  Run time limit on kernels:                     %s\n", deviceProp.kernelExecTimeoutEnabled ? "Yes" : "No");
-        //~ printf("  Integrated GPU sharing Host Memory:            %s\n", deviceProp.integrated ? "Yes" : "No");
-        //~ printf("  Support host page-locked memory mapping:       %s\n", deviceProp.canMapHostMemory ? "Yes" : "No");
-        //~ printf("  Alignment requirement for Surfaces:            %s\n", deviceProp.surfaceAlignment ? "Yes" : "No");
-        //~ printf("  Device has ECC support:                        %s\n", deviceProp.ECCEnabled ? "Enabled" : "Disabled");
-//~ #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
-        //~ printf("  CUDA Device Driver Mode (TCC or WDDM):         %s\n", deviceProp.tccDriver ? "TCC (Tesla Compute Cluster Driver)" : "WDDM (Windows Display Driver Model)");
-//~ #endif
-        //~ printf("  Device supports Unified Addressing (UVA):      %s\n", deviceProp.unifiedAddressing ? "Yes" : "No");
-        //~ printf("  Device PCI Domain ID / Bus ID / location ID:   %d / %d / %d\n", deviceProp.pciDomainID, deviceProp.pciBusID, deviceProp.pciDeviceID);
-
-        //~ const char *sComputeMode[] =
-        //~ {
-            //~ "Default (multiple host threads can use ::cudaSetDevice() with device simultaneously)",
-            //~ "Exclusive (only one host thread in one process is able to use ::cudaSetDevice() with this device)",
-            //~ "Prohibited (no host thread can use ::cudaSetDevice() with this device)",
-            //~ "Exclusive Process (many threads in one process is able to use ::cudaSetDevice() with this device)",
-            //~ "Unknown",
-            //~ NULL
-        //~ };
-        //~ printf("  Compute Mode:\n");
-        //~ printf("     < %s >\n", sComputeMode[deviceProp.computeMode]);
-    }
 }
 
 void getCudaInformation(int& mps, int& cuda_cores_per_mp, int& threads_per_mp, int& threads_per_block, int* size_thread_block, int* size_grid , unsigned long long& device_global_memory){
@@ -739,36 +781,25 @@ void naturalMergeSort(Matrix& m, int limit=-1){
 	
 	//sort 
 	int count = 0;
+	int current_limit = -1;
 	while(num_slides > 1){
+		if(num_slides > 2){
+			current_limit = limit;
+		}
 		std::cout << count+1 <<" Iteration: You can use " << int(num_slides/2) << " Threads" << std::endl;
 		int i;
-		if(num_slides>2)
+		
+		for(i=2;i<int(num_slides+1);i+=2)
 		{
-			for(i=2;i<int(num_slides+1);i+=2)
-			{
-				//parallelisierbar
-				mergeHost(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1);
-				
-				slide_buffer[i/2-1]= slide_buffer[i-2];
-				slide_buffer[i/2]= slide_buffer[i];
-			}
+			//parallelisierbar
+			mergeHost(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1,current_limit);
 			
-			if(num_slides%2 == 1){
-				slide_buffer[i/2] = slide_buffer[num_slides];
-			}
-		}else{
-			for(i=2;i<int(num_slides+1);i+=2)
-			{
-				//parallelisierbar
-				mergeHost(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1,limit);
-				
-				slide_buffer[i/2-1]= slide_buffer[i-2];
-				slide_buffer[i/2]= slide_buffer[i];
-			}
-			
-			if(num_slides%2 == 1){
-				slide_buffer[i/2] = slide_buffer[num_slides];
-			}
+			slide_buffer[i/2-1]= slide_buffer[i-2];
+			slide_buffer[i/2]= slide_buffer[i];
+		}
+		
+		if(num_slides%2 == 1){
+			slide_buffer[(num_slides+1)/2] = slide_buffer[num_slides];
 		}
 		
 		count ++;
@@ -794,20 +825,22 @@ int main(int argc, char** argv)
 	std::cout << std::endl;
 	
 	//plan: (T * v_points) * (T * v_points)^T 
-	//int seed = 1479731956;
-	int seed = time(NULL);
+	int seed = 1479731956;
+	//int seed = time(NULL);
 	printf("%d\n",seed);
     	srand(seed);
     
 	//point vector ALLE PUNKTE
 	Matrix V;
 	V.height = 4;
-	V.width = 100;
+	V.width = 10;
 	std::cout << "points " << V.width << std::endl; 
 	V.stride = V.width;
 	mallocMatrix(V);
 	fillHomogenMatrixWithRandomFloats(V);
-
+	printMatrix(V);
+	
+	
 	Matrix last_point_V;
 	last_point_V.height = 4;
 	last_point_V.width = 1;
@@ -815,10 +848,10 @@ int main(int argc, char** argv)
 	mallocMatrix(last_point_V);
 	getColVecOfMatrix(V,V.width-1,last_point_V);
 	// Matrix initialized
-	printMatrix(last_point_V);
+	//printMatrix(last_point_V);
 	
 	//point index for searching
-	int index = 0;
+	int index = 1;
 	
 	//point for searchings
 	Matrix nn_point;
@@ -826,10 +859,19 @@ int main(int argc, char** argv)
 	nn_point.width = 1;
 	nn_point.stride = nn_point.width;
 	mallocMatrix(nn_point);
-	
 	getColVecOfMatrix(V,index,nn_point);
 	std::cout << "pic point " << index << std::endl;
 	//printMatrix(nn_point);
+	printMatrix(nn_point);
+	//neue variante ohne transformation
+	Matrix distance_vec;
+	distance_vec.height = 1;
+	distance_vec.width = V.width;
+	distance_vec.stride = distance_vec.width;
+	mallocMatrix(distance_vec);
+	
+	Distances(V,nn_point,distance_vec);
+	printMatrix(distance_vec);
 	
 	//transformation with point
 	Matrix T;
@@ -892,9 +934,32 @@ int main(int argc, char** argv)
 
 	printMatrix(last_point);
 	std::cout << "scalar: " << V2.elements[V2.width*V2.height-1] << std::endl;
+	
+	
+	
 	//printMatrix(V1);
 	//printMatrix(V2);	
 
+
+	Matrix sortedVector;
+	sortedVector.height = 1;
+	sortedVector.width = V2.width;
+	sortedVector.stride = sortedVector.width;
+	mallocMatrix(sortedVector);
+
+	printMatrix(V2);
+	
+	Sort(V2,sortedVector);
+	
+	//std::cout << "Sorted Last Point: " << sortedVector.elements[sortedVector.width*sortedVector.height-1] << std::endl;
+	//printMatrix(V2);
+	printMatrix(sortedVector);
+
+	//Sort(sortedVector,sortedVector);
+	//Sort(sortedVector,sortedVector);
+	//Sort(sortedVector,sortedVector);
+	
+	//printMatrix(sortedVector);
 	//Matrix Weights;
 	//Weights.height = Vtransposed.height;
 	//Weights.width = V1.width;
@@ -920,27 +985,19 @@ int main(int argc, char** argv)
 	
 	
 	
-	Matrix unsortedVector;
-	unsortedVector.height = 1;
-	unsortedVector.width = 1000;
-	unsortedVector.stride = unsortedVector.width;
-	mallocMatrix(unsortedVector);
-	fillMatrixWithRandomFloats(unsortedVector);
+	//~ Matrix unsortedVector;
+	//~ unsortedVector.height = 1;
+	//~ unsortedVector.width = 12;
+	//~ unsortedVector.stride = unsortedVector.width;
+	//~ mallocMatrix(unsortedVector);
+	//~ fillMatrixWithRandomFloats(unsortedVector);
 	//~ printMatrix(unsortedVector);
 	
-	Matrix sortedVector;
-	sortedVector.height = 1;
-	sortedVector.width = unsortedVector.width;
-	sortedVector.stride = sortedVector.width;
-	mallocMatrix(sortedVector);
+	//~ naturalMergeSort(V2,50);
+
 	
-	//naturalMergeSort(V2,50);
 
-	Sort(V2,50);
-	//~ std::cout << "Sorted: " << std::endl;
-	printMatrix(V2);
-
-	free(unsortedVector.elements);
+	//~ free(unsortedVector.elements);
 	free(sortedVector.elements);
 	free(V.elements);
 	//free(Vtransposed.elements);
