@@ -196,6 +196,7 @@ __global__ static void MergeSort(Matrix m, Matrix results);
 //TODO: implement
 __global__ static void SortKernel(Matrix m, int limit=-1);
 
+__global__ static void combSortKernel(Matrix m, int gap);
 
 __global__ void DistanceKernel(const Matrix A, const Matrix B, Matrix dest);
 
@@ -372,6 +373,32 @@ void Distances(Matrix& A, Matrix& B, Matrix& C)
 	cudaFree(d_C.elements);
 }
 
+
+void combSort(Matrix& A) {
+    Matrix d_A;
+    d_A.width = d_A.stride = A.width; d_A.height = A.height;
+    size_t size = A.width * A.height * sizeof(float);
+    cudaMalloc(&d_A.elements, size);
+    cudaMemcpy(d_A.elements, A.elements, size, cudaMemcpyHostToDevice);
+
+    clock_t calcstart, calcend;
+    calcstart = clock();
+
+    int threadsPerBlock = m_threads_per_block;
+    int blocksPerGrid = (A.width + threadsPerBlock - 1) / threadsPerBlock;
+
+    if(2 * threadsPerBlock < A.width) {
+        combSortKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, A.width / 2);
+    } else {
+        combSortKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, threadsPerBlock);
+    }
+
+    calcend = clock();
+
+    cudaMemcpy(A.elements, d_A.elements, size, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_A.elements);
+}
 
 
 void Sort(Matrix& A, Matrix& B)
@@ -748,6 +775,23 @@ __global__ static void SortKernel2(Matrix m, int* slide_buffer, int num_slides, 
 }
 
 
+__global__ static void combSortKernel(Matrix m, int gap) {
+
+    const unsigned int tid = 2*gap * blockIdx.x + threadIdx.x;
+
+
+
+    if(tid + gap < m.width) {
+        if(tid == 2050)
+            printf("afawdf %d\n", tid);
+        if(m.elements[tid] > m.elements[tid+gap]) {
+           float tmp = m.elements[tid];
+           m.elements[tid] = m.elements[tid+gap];
+           m.elements[tid+gap] = tmp;
+        }
+    }
+}
+
 
 __global__ static void SortKernel(Matrix m, int limit){
 	
@@ -890,6 +934,34 @@ void mergeHost(float* a, int i1, int j1, int i2, int j2,int limit=-1){
 }
 
 
+void combSortSerial(Matrix& m) {
+    int gap = m.width;
+    bool sorted = false;
+
+    while(!sorted) {
+        gap = gap / 1.3;
+        cout << gap << endl;
+        if(gap > 1) {
+            sorted = false;
+        } else {
+            gap = 1;
+            sorted = true;
+        }
+
+        int i = 0;
+        float tmp = 0.0;
+        while(i + gap < m.width) {
+            if(m.elements[i] > m.elements[i+gap]) {
+                tmp = m.elements[i];
+                m.elements[i] = m.elements[i+gap];
+                m.elements[i+gap] = tmp;
+                sorted = false;
+            }
+            i++;
+        }
+    }
+}
+
 void naturalMergeSort(Matrix& m, int limit=-1){
 	int m_elements = m.width*m.height;
 	
@@ -972,7 +1044,7 @@ int main(int argc, char** argv)
 	//point vector ALLE PUNKTE
 	Matrix V;
 	V.height = 3;
-	V.width = 4200;
+        V.width = 4000;
 	std::cout << "points " << V.width << std::endl; 
 	V.stride = V.width;
 	mallocMatrix(V);
@@ -1088,10 +1160,11 @@ int main(int argc, char** argv)
 
 	//printMatrix(distance_vec);
 	
-	Sort2(distance_vec, sortedVector);
+        //Sort2(distance_vec, sortedVector);
 	//naturalMergeSort(distance_vec);
 	//printMatrix(sortedVector);
-	//printMatrix(distance_vec);
+        combSort(distance_vec);
+        //printMatrix(distance_vec);
 	//std::cout << "Sorted Last Point: " << sortedVector.elements[sortedVector.width*sortedVector.height-1] << std::endl;
 	//printMatrix(V2);
 	//printMatrix(sortedVector);
