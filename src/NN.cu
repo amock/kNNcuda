@@ -199,6 +199,7 @@ __global__ static void SortKernel(Matrix m, int limit=-1);
 
 __global__ void DistanceKernel(const Matrix A, const Matrix B, Matrix dest);
 
+__global__ static void SortKernel2(Matrix m, int* slide_buffer, int num_slides, int limit = -1, int offset=0);
 
 
 // Get a matrix element
@@ -353,6 +354,8 @@ void Distances(Matrix& A, Matrix& B, Matrix& C)
 	int threadsPerBlock = m_threads_per_block;
 	int blocksPerGrid = (A.width +threadsPerBlock-1)/threadsPerBlock;
 
+	printf("bpg %d , tpb %d\n",blocksPerGrid,threadsPerBlock);
+
 	DistanceKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C);
 
 	calcend = clock();
@@ -394,7 +397,7 @@ void Sort(Matrix& A, Matrix& B)
 	clock_t calcstart, calcend;
 	calcstart = clock();
 	// Invoke kernel
-	int A_size = A.width*A.height;
+	
 	//~ int threadsPerBlock = m_threads_per_block;
 	//~ int blocksPerGrid = (A.width +threadsPerBlock-1)/threadsPerBlock;
 	//~ MergeSort<<<1,A_size>>>(d_A,d_B);
@@ -405,7 +408,8 @@ void Sort(Matrix& A, Matrix& B)
 	//~ std::cout << sort_iterations << std::endl;
 	//~ for(int i=0;i<sort_iterations;i++)
 	//~ {
-		SortKernel<<<1,  A_size, sizeof(float) * A_size * 2 >>>(d_A);
+	int A_size = A.width*A.height;
+	SortKernel<<<1,  A_size, sizeof(float) * A_size * 2 >>>(d_A);
 	//~ }
 
 
@@ -420,6 +424,95 @@ void Sort(Matrix& A, Matrix& B)
 	// Free device memory
 	cudaFree(d_A.elements);
 	cudaFree(d_B.elements);
+}
+
+//second try
+void Sort2(Matrix& m, Matrix& dest, int limit=-1){
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (m.width +threadsPerBlock-1)/threadsPerBlock;
+
+	printf("bpg %d , tpb %d\n",blocksPerGrid,threadsPerBlock);
+	
+	Matrix d_m;
+	d_m.width = d_m.stride = m.width; d_m.height = m.height;
+	size_t m_size = m.width * m.height * sizeof(float);
+	cudaMalloc(&d_m.elements, m_size);
+	cudaMemcpy(d_m.elements, m.elements, m_size, cudaMemcpyHostToDevice);         
+
+	
+	int m_elements = m.width*m.height;
+	int slide_buffer_size = int(m_elements-0.5);
+	int* slide_buffer = (int*) malloc(slide_buffer_size * sizeof(int));
+
+	clock_t calcstart, calcend;
+	calcstart = clock();
+
+	//create RUNS
+	int num_slides=1;
+	slide_buffer[0] = 0;
+	for(int x=1; x < slide_buffer_size+1; x++) {
+		if(m.elements[x] < m.elements[x-1])
+		{
+			slide_buffer[num_slides] = x;
+			num_slides++;
+		}
+	}
+	slide_buffer[num_slides] = m_elements;
+	slide_buffer_size = num_slides+1;
+	
+	// Load A to device memory
+	int* d_slide_buffer;
+	int slide_buffer_mem_size = slide_buffer_size* sizeof(int);
+	cudaMalloc(&d_slide_buffer, slide_buffer_mem_size );
+	cudaMemcpy(d_slide_buffer, slide_buffer, slide_buffer_mem_size, cudaMemcpyHostToDevice);  
+	
+
+	//sort 
+	int count = 0;
+	int current_limit = -1;
+	while(num_slides > 1){
+		
+	
+		if(num_slides <= 2){
+			current_limit = limit;
+		}
+		
+		int dim = m.width*m.height;
+		
+		//cudaMemcpy(slide_buffer, d_slide_buffer, slide_buffer_size * sizeof(int), cudaMemcpyHostToDevice);
+		//SortKernel2<<<1,  dim, sizeof(float) * dim * 2 >>>(d_m,d_slide_buffer, num_slides, current_limit);
+		
+		
+		int partition = threadsPerBlock*blocksPerGrid ;
+		
+		//printf("awda %d\n",blocksPerGrid);
+		
+		
+		cudaMemcpy(slide_buffer, d_slide_buffer, (num_slides+1) * sizeof(int), cudaMemcpyHostToDevice);
+		SortKernel2<<<blocksPerGrid, threadsPerBlock >>>(d_m,d_slide_buffer, num_slides, current_limit);
+		cudaMemcpy(slide_buffer, d_slide_buffer, (num_slides+1) * sizeof(int), cudaMemcpyDeviceToHost);
+		
+		
+		
+		
+		//SortKernel2<<<blocksPerGrid, threadsPerBlock >>>(d_m,d_slide_buffer, num_slides, current_limit,10);
+		
+		//cudaMemcpy(slide_buffer, d_slide_buffer, slide_buffer_size * sizeof(int), cudaMemcpyDeviceToHost);
+		
+		count ++;
+		num_slides = int(num_slides/2.0+0.5);
+		
+	}
+	
+	calcend = clock();
+	printf("Sort GPU %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+
+	
+	cudaMemcpy(dest.elements, d_m.elements, m_size, cudaMemcpyDeviceToHost);
+	
+	cudaFree(d_m.elements);
+	cudaFree(d_slide_buffer);
+	free(slide_buffer);
 }
 
 // Matrix multiplication kernel called by MatMul()
@@ -502,6 +595,10 @@ __global__ void DistanceKernel(const Matrix points,const Matrix s_point, Matrix 
 {
 	const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
 	
+	//~ if(tid>20000)
+		//~ printf("thread: %d\n",tid);
+	
+	
 	int num_points = points.width;
 	if(tid < num_points)
 	{
@@ -513,7 +610,7 @@ __global__ void DistanceKernel(const Matrix points,const Matrix s_point, Matrix 
 
 __device__ inline void Merge2(float* a, int i1, int j1, int i2, int j2,int limit=-1){
 	
-	
+	int limit_copy = limit;
 	
 	float* temp = (float*) malloc((j2-i1+1) * sizeof(float));  //array used for merging
     int i,j,k;
@@ -522,23 +619,26 @@ __device__ inline void Merge2(float* a, int i1, int j1, int i2, int j2,int limit
     k=0;
     
     int counter = 0;
-    while(i<=j1 && j<=j2 )    //while elements in both lists
+    while(i<=j1 && j<=j2 && limit!=0 )    //while elements in both lists
     {
 		counter ++;
+		limit --;
         if(a[i]<a[j])
             temp[k++]=a[i++];
         else
             temp[k++]=a[j++];
     }
     
-    while(i<=j1 )    //copy remaining elements of the first list
+    while(i<=j1 && limit!=0)    //copy remaining elements of the first list
         temp[k++]=a[i++];
+        limit--;
         
-    while(j<=j2 )    //copy remaining elements of the second list
+    while(j<=j2 && limit!=0)    //copy remaining elements of the second list
         temp[k++]=a[j++];
+        limit--;
         
     //Transfer elements from temp[] back to a[]
-    for(i=i1,j=0;i<=j2 ;i++,j++)
+    for(i=i1,j=0;i<=j2 && limit_copy!=0;i++,j++,limit_copy--)
 	{
         a[i] = temp[j];
     }   
@@ -617,6 +717,37 @@ __global__ static void MergeSort(Matrix m, Matrix results){
 	
 	m.elements[tid] = shared[tid];
 }
+
+__global__ static void SortKernel2(Matrix m, int* slide_buffer, int num_slides, int limit , int offset){
+	
+	//const unsigned int i =  threadIdx.x * 2;
+	const unsigned int i = (blockDim.x * blockIdx.x + threadIdx.x)*2 + offset;
+			
+	
+	if(i>4000){
+		//printf("thread %d\n",i);		
+	}
+	if( i>=2 && i < num_slides+1 ) 
+	{
+		Merge2(m.elements, slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1,limit);
+	}
+	__syncthreads();
+	
+	if(i>=2 && i < num_slides+1 ) 
+	{
+		slide_buffer[i/2]= slide_buffer[i];
+	}
+	
+	__syncthreads();
+	
+	if(num_slides%2 == 1 && i == offset){
+		slide_buffer[(num_slides+1)/2] = slide_buffer[num_slides];
+	}
+	
+	
+}
+
+
 
 __global__ static void SortKernel(Matrix m, int limit){
 	
@@ -765,6 +896,9 @@ void naturalMergeSort(Matrix& m, int limit=-1){
 	int slide_buffer_size = int(m_elements-0.5);
 	int* slide_buffer = (int*) malloc(slide_buffer_size * sizeof(int));
 
+	clock_t calcstart, calcend;
+	calcstart = clock();
+
 	//create RUNS
 	int num_slides = 1;
 	slide_buffer[0] = 0;
@@ -808,6 +942,10 @@ void naturalMergeSort(Matrix& m, int limit=-1){
 		
 	}
 	
+	calcend = clock();
+	printf("Sort CPU %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+	
+	
 	free(slide_buffer);
 }
 
@@ -834,7 +972,7 @@ int main(int argc, char** argv)
 	//point vector ALLE PUNKTE
 	Matrix V;
 	V.height = 3;
-	V.width = 50000000;
+	V.width = 4200;
 	std::cout << "points " << V.width << std::endl; 
 	V.stride = V.width;
 	mallocMatrix(V);
@@ -950,8 +1088,10 @@ int main(int argc, char** argv)
 
 	//printMatrix(distance_vec);
 	
-	Sort(distance_vec,sortedVector);
-	
+	Sort2(distance_vec, sortedVector);
+	//naturalMergeSort(distance_vec);
+	//printMatrix(sortedVector);
+	//printMatrix(distance_vec);
 	//std::cout << "Sorted Last Point: " << sortedVector.elements[sortedVector.width*sortedVector.height-1] << std::endl;
 	//printMatrix(V2);
 	//printMatrix(sortedVector);
