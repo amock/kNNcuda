@@ -387,8 +387,8 @@ void Distances(Matrix& A, Matrix& B, Matrix& C)
 	size = C.width * C.height * sizeof(float);
 	cudaMalloc(&d_C.elements, size);
 
-	clock_t calcstart, calcend;
-	calcstart = clock();
+	//~ clock_t calcstart, calcend;
+	//~ calcstart = clock();
 
 	// Invoke kernel
 	int threadsPerBlock = m_threads_per_block;
@@ -398,7 +398,7 @@ void Distances(Matrix& A, Matrix& B, Matrix& C)
 
 	DistanceKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C);
 
-	calcend = clock();
+	//~ calcend = clock();
 	//printf("Distance calculation %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
 
 	// Read C from device memory
@@ -460,38 +460,6 @@ void combSort2(Matrix& A) {
 
 
 
-
-
-
-
-
-	
-
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-
     calcend = clock();
     printf("Sorting %f milliseconds\n",(float)(calcend-calcstart) * 1000.0 / CLOCKS_PER_SEC);
 
@@ -522,12 +490,11 @@ float evaluateEpsilon(Matrix& A, int k, float epsilon, int& num_distances, int t
 	*H_ResultVector = 0;
 	
 	
-	clock_t calcstart, calcend;
-    calcstart = clock();
+	//~ clock_t calcstart, calcend;
+    //~ calcstart = clock();
     
     float change_factor = 0.2;
     bool first_value = true;
-    bool first_epsilion_under = false;
     bool epsilon_under = false;
     
 	while( *H_ResultVector < k || *H_ResultVector > k + tolerance ) {
@@ -570,8 +537,8 @@ float evaluateEpsilon(Matrix& A, int k, float epsilon, int& num_distances, int t
 	
 	}
 	num_distances = *H_ResultVector;
-	calcend = clock();
-    //printf("Epsilon Evaluation %f milliseconds\n",(float)(calcend-calcstart) * 1000.0 / CLOCKS_PER_SEC);
+	//~ calcend = clock();
+    //~ printf("Epsilon Evaluation %f milliseconds\n",(float)(calcend-calcstart) * 1000.0 / CLOCKS_PER_SEC);
 
 	
 	cudaFree(d_A.elements);
@@ -737,13 +704,13 @@ void Sort2(Matrix& m, Matrix& dest, int limit=-1){
 			current_limit = limit;
 		}
 		
-		int dim = m.width*m.height;
+		//int dim = m.width*m.height;
 		
 		//cudaMemcpy(slide_buffer, d_slide_buffer, slide_buffer_size * sizeof(int), cudaMemcpyHostToDevice);
 		//SortKernel2<<<1,  dim, sizeof(float) * dim * 2 >>>(d_m,d_slide_buffer, num_slides, current_limit);
 		
 		
-		int partition = threadsPerBlock*blocksPerGrid ;
+		//int partition = threadsPerBlock*blocksPerGrid ;
 		
 		//printf("awda %d\n",blocksPerGrid);
 		
@@ -1362,6 +1329,7 @@ int main(int argc, char** argv)
     	srand(seed);
     
 	//point vector ALLE PUNKTE
+	// V muss auf GPU geladen werden: 1mal
 	Matrix V;
 	V.height = 3;
         V.width = 5000000;
@@ -1371,16 +1339,7 @@ int main(int argc, char** argv)
 	fillMatrixWithRandomFloats(V);
 	//printMatrix(V);
 	
-	Matrix last_point_V;
-	last_point_V.height = 3;
-	last_point_V.width = 1;
-	last_point_V.stride = last_point_V.width;
-	mallocMatrix(last_point_V);
-	getColVecOfMatrix(V,V.width-1,last_point_V);
-	// Matrix initialized
-	printMatrix(last_point_V);
-	
-	
+	// soll nur auf der GPU angelegt werden
 	//point for searchings
 	Matrix nn_point;
 	nn_point.height = 3;
@@ -1389,6 +1348,7 @@ int main(int argc, char** argv)
 	mallocMatrix(nn_point);
 	
 	
+	// soll nur auf der GPU angelegt werden
 	Matrix distance_vec;
 	distance_vec.height = 1;
 	distance_vec.width = V.width;
@@ -1396,10 +1356,11 @@ int main(int argc, char** argv)
 	mallocMatrix(distance_vec);
 	
 	int k = 10;
-	int index = 20000;
+	//int index = 20000;
 	float initial_epsilon = 0.003792;
 	
-	
+	// soll auf der GPU und Arbeitsspeicher angelegt werden
+	// am ende in 
 	MatrixInt indices_vec;
 	indices_vec.height = 1;
 	//indices_vec.width = num_shortes_distances;
@@ -1410,12 +1371,14 @@ int main(int argc, char** argv)
 	
 	float epsilon = initial_epsilon;
 	printf("START\n");
-	for(int i = 0;i<2000;i++){
+	for(int i = 0;i<20;i++){
 		
 		printf("\n%d\n",i);
+		//methode nur mit GPU MAtrizen
 		getColVecOfMatrix(V,i,nn_point);
 		//~ std::cout << "pic point " << index << std::endl;
 	
+		// Methode nur mit GPU Matrizen
 		Distances(V, nn_point, distance_vec);
 		
 		//~ printMatrix(distance_vec);
@@ -1423,10 +1386,14 @@ int main(int argc, char** argv)
     
 		int num_shortes_distances = 0;
     
+		// distance vec soll GPU matrix sein
 		epsilon = evaluateEpsilon( distance_vec, k, epsilon, num_shortes_distances);
 		//~ printf("epsilon found: %f, num_distances: %d\n",epsilon, num_shortes_distances);
 		printf("epsilon: %f\n",epsilon);
     
+		// distance_vec soll nur gpu matrize sein , indices_vec kommt zurzueck
+		// epsilon wird ausserhalb der gpu uebertragen
+		// 
 		getDistancesUnderEpsilon(distance_vec,indices_vec,epsilon);
 		
 		//~ printMatrixInt(indices_vec);
@@ -1442,6 +1409,24 @@ int main(int argc, char** argv)
 	free(distance_vec.elements);
 	free(indices_vec.elements);
 	free(nn_point.elements);
+	
+	/*
+	 * 1. Auf Arbeitsspeicher: V,indices_vec
+	 * 2. Auf GPU: D_V, D_nn_point, D_distance_vec, D_indices_vec
+	 * 3. V wird in D_V kopiert
+	 * 4. fuer jedes i
+	 * 		a. index i wird zur GPU geschickt
+	 * 		b. Auf GPU:
+	 * 			speichere punkt D_V[i] in D_nn_point
+	 * 			rechne mit D_V und D_nn_point Distanzen aus -> D_distance_vec
+	 * 			schicke epsilon(initial) von CPU zu GPU evaluiere epsilon mit k -> epsilon
+	 * 			schicke epsilon von CPU zu GPU und bekomme k naechste nachbarn in D_indices_vec
+	 * 		c. Kopiere D_indices_vec zu Host -> indices_vec
+	 * 		
+	 * 
+	 * 		 
+	 * 
+	 */
 	
 	return 0;
 }
