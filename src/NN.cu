@@ -19,6 +19,13 @@ typedef struct {
     float* elements;
 } Matrix;
 
+typedef struct {
+    int width;
+    int height;
+    int stride; 
+    int* elements;
+} MatrixInt;
+
 int m_mps = 0;
 int m_cuda_cores_per_mp = 0;
 int m_threads_per_mp = 0;
@@ -109,6 +116,10 @@ void mallocMatrix(Matrix& m){
 	m.elements = (float*)malloc(m.width * m.height * sizeof(float));
 }
 
+void mallocMatrixInt(MatrixInt& m){
+	m.elements = (int*)malloc(m.width * m.height * sizeof(int));
+}
+
 
 void fillTwoMatrizesWithRandomFloats(Matrix& m1, Matrix& m2) {
 	
@@ -159,7 +170,7 @@ void fillMatrixWithRandomFloats(Matrix& m)
 	//int j;
 	for(i=0;i<m.height*m.width;i++)
 	{
-		*(m.elements + i ) = (int)(((float)rand()/(float)(RAND_MAX)) * 10.0 - 5.0);
+		*(m.elements + i ) = (((float)rand()/(float)(RAND_MAX)) * 10.0 - 5.0);
 	}
 }
 
@@ -181,11 +192,31 @@ void printMatrix(Matrix& m)
 	printf("\n");
 }
 
+void printMatrixInt(MatrixInt& m)
+{
+	int i;
+	//int j;
+	for(i=0;i<m.width*m.height;i++)
+	{
+		if(i%m.width == 0){
+			printf("|");
+		}
+		printf(" %d ",*(m.elements + i ));
+		if(i%m.width == m.width-1){
+			printf("|\n");
+		}
+	}
+	
+	printf("\n");
+}
+
 void getColVecOfMatrix(const Matrix& m, int index , Matrix& v_out){
 	for(int i=0;i< m.height;i++){
 		v_out.elements[i] = m.elements[index+i*m.width];
 	}
 }
+
+
 
 // Forward declaration of the matrix multiplication kernel
 __global__ void MatMulKernel(const Matrix, const Matrix, Matrix);
@@ -197,6 +228,14 @@ __global__ static void MergeSort(Matrix m, Matrix results);
 __global__ static void SortKernel(Matrix m, int limit=-1);
 
 __global__ static void combSortKernel(Matrix m);
+
+__global__ static void combSortKernel2(Matrix m, int gap, bool* test_bool=NULL);
+
+__global__ static void evaluateEpsilonKernel(Matrix m, float epsilon, int* num_results = NULL);
+
+__global__ static void SelectionKernel(Matrix m, MatrixInt dest, float epsilon);
+
+__global__ static void InitSelectionKernel();
 
 __global__ void DistanceKernel(const Matrix A, const Matrix B, Matrix dest);
 
@@ -355,12 +394,12 @@ void Distances(Matrix& A, Matrix& B, Matrix& C)
 	int threadsPerBlock = m_threads_per_block;
 	int blocksPerGrid = (A.width +threadsPerBlock-1)/threadsPerBlock;
 
-	printf("bpg %d , tpb %d\n",blocksPerGrid,threadsPerBlock);
+	//printf("bpg %d , tpb %d\n",blocksPerGrid,threadsPerBlock);
 
 	DistanceKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C);
 
 	calcend = clock();
-	printf("Distance calculation %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+	//printf("Distance calculation %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
 
 	// Read C from device memory
 	cudaMemcpy(C.elements, d_C.elements, size,
@@ -371,6 +410,202 @@ void Distances(Matrix& A, Matrix& B, Matrix& C)
 	cudaFree(d_A.elements);
 	cudaFree(d_B.elements);
 	cudaFree(d_C.elements);
+}
+
+void combSort2(Matrix& A) {
+    Matrix d_A;
+    d_A.width = d_A.stride = A.width;
+    d_A.height = A.height;
+    size_t size = A.width * A.height * sizeof(float);
+    cudaMalloc(&d_A.elements, size);
+    cudaMemcpy(d_A.elements, A.elements, size, cudaMemcpyHostToDevice);
+
+    clock_t calcstart, calcend;
+    calcstart = clock();
+
+	bool* D_ResultVector;
+
+	cudaMalloc((void**)&D_ResultVector, sizeof(bool) );
+	
+	bool* H_ResultVector = (bool*)malloc(sizeof(bool));
+
+
+	int gap = A.width;
+
+    bool sorted = false;
+	
+    while(!sorted) {
+		gap /= 1.3;
+        if(gap < 1){
+			gap = 1;
+            sorted = true;
+		}
+
+		int threadsPerBlock = m_threads_per_block;
+		int blocksPerGrid = (A.width + threadsPerBlock - 1) / (gap *2 );
+
+		//std::cout << "sorting with gap: " << gap << std::endl;
+		combSortKernel2<<<blocksPerGrid, threadsPerBlock>>>(d_A, gap, D_ResultVector);//, D_ResultVector);
+		cudaMemcpy(H_ResultVector, D_ResultVector, sizeof(bool), cudaMemcpyDeviceToHost);
+		
+		
+		sorted = (*(H_ResultVector));
+		//std::cout << "Sorted: " << sorted << std::endl;
+		
+        if(gap > 1) {
+            sorted = false;
+        } 
+		
+    }
+
+
+
+
+
+
+
+
+	
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+    calcend = clock();
+    printf("Sorting %f milliseconds\n",(float)(calcend-calcstart) * 1000.0 / CLOCKS_PER_SEC);
+
+    cudaMemcpy(A.elements, d_A.elements, size, cudaMemcpyDeviceToHost);
+    
+    cudaFree(d_A.elements);
+    cudaFree(D_ResultVector);
+    
+    free(H_ResultVector);
+}
+
+float evaluateEpsilon(Matrix& A, int k, float epsilon, int& num_distances, int tolerance = 0){
+	Matrix d_A;
+    d_A.width = d_A.stride = A.width;
+    d_A.height = A.height;
+    size_t size = A.width * A.height * sizeof(float);
+    cudaMalloc(&d_A.elements, size);
+    cudaMemcpy(d_A.elements, A.elements, size, cudaMemcpyHostToDevice);
+	
+	int* D_ResultVector;
+	cudaMalloc((void**)&D_ResultVector, sizeof(int) );
+	
+	int* H_ResultVector = (int*)malloc(sizeof(int));
+	
+	
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (A.width +threadsPerBlock-1)/threadsPerBlock;
+	*H_ResultVector = 0;
+	
+	
+	clock_t calcstart, calcend;
+    calcstart = clock();
+    
+    float change_factor = 0.2;
+    bool first_value = true;
+    bool first_epsilion_under = false;
+    bool epsilon_under = false;
+    
+	while( *H_ResultVector < k || *H_ResultVector > k + tolerance ) {
+	
+		*H_ResultVector = 0;
+		
+
+	
+		cudaMemcpy(D_ResultVector, H_ResultVector, sizeof(int), cudaMemcpyHostToDevice);
+	
+		evaluateEpsilonKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, epsilon, D_ResultVector);
+	
+		cudaMemcpy(H_ResultVector, D_ResultVector, sizeof(int), cudaMemcpyDeviceToHost);
+	
+		//printf("found %d results for epsilon %f. k is %d\n", *H_ResultVector, epsilon, k);
+		
+		if( *H_ResultVector > k+tolerance){
+			epsilon *= (1.0-change_factor);
+			if(first_value){
+				//printf("first value is over limit\n");
+				epsilon_under = false;
+				first_value = false;
+			}else if(epsilon_under){
+				change_factor*=0.5;
+				//printf("over limit: change_factor changed to %f\n",change_factor);
+				epsilon_under = false;
+			}
+		}else if(*H_ResultVector < k){
+			epsilon *= (1.0+change_factor);
+			if(first_value){
+				//printf("first value is under limit\n");
+				epsilon_under = true;
+				first_value = false;
+			}else if(!epsilon_under){
+				change_factor*=0.5;
+				//printf("under limit: change_factor changed to %f\n",change_factor);
+				epsilon_under = true;
+			}
+		}
+	
+	}
+	num_distances = *H_ResultVector;
+	calcend = clock();
+    //printf("Epsilon Evaluation %f milliseconds\n",(float)(calcend-calcstart) * 1000.0 / CLOCKS_PER_SEC);
+
+	
+	cudaFree(d_A.elements);
+	cudaFree(D_ResultVector);
+	free(H_ResultVector);
+	return epsilon;
+}
+
+void getDistancesUnderEpsilon(Matrix& A, MatrixInt& B, float epsilon){
+	Matrix d_A;
+    d_A.width = d_A.stride = A.width;
+    d_A.height = A.height;
+    size_t sizeA = A.width * A.height * sizeof(float);
+    cudaMalloc(&d_A.elements, sizeA);
+    cudaMemcpy(d_A.elements, A.elements, sizeA, cudaMemcpyHostToDevice);
+    
+    MatrixInt d_B;
+    d_B.width = d_B.stride = B.width;
+    d_B.height = B.height;
+    size_t sizeB = B.width * B.height * sizeof(int);
+    cudaMalloc(&d_B.elements, sizeB);
+    
+    
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (A.width + threadsPerBlock-1)/threadsPerBlock;
+    
+    InitSelectionKernel<<<1,1>>>();
+    SelectionKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, epsilon);
+	cudaMemcpy(B.elements, d_B.elements, sizeB, cudaMemcpyDeviceToHost);
+	
+    
+    
+    cudaFree(d_A.elements);
+	cudaFree(d_B.elements);
 }
 
 
@@ -394,6 +629,7 @@ void combSort(Matrix& A) {
     printf("Sorting %f milliseconds\n",(float)(calcend-calcstart) * 1000.0 / CLOCKS_PER_SEC);
 
     cudaMemcpy(A.elements, d_A.elements, size, cudaMemcpyDeviceToHost);
+    
     cudaFree(d_A.elements);
 }
 
@@ -772,12 +1008,43 @@ __global__ static void SortKernel2(Matrix m, int* slide_buffer, int num_slides, 
 }
 
 
+__global__ static void combSortKernel2(Matrix m, int gap, bool* test_bool) {
+	
+	
+	*test_bool = true;
+	
+	
+	
+	const unsigned int tid = gap *2 * blockIdx.x + threadIdx.x;
+	// es gehen (thread_size - gap) threads verloren  
+	if( threadIdx.x < gap  && tid + gap < m.width)
+	{
+		//printf("%d * %d + %d = %d\n",gap * 2,blockIdx.x,threadIdx.x, tid);
+		
+        if(m.elements[tid] > m.elements[tid+gap]) 
+        {
+			//printf("m.elements[%d]=%f > m.elements[%d]=%f\n",tid,m.elements[tid],tid+gap,m.elements[tid+gap]);
+            //printf("switched %d, %d\n",tid,tid+gap);
+            
+            float tmp = m.elements[tid];
+            m.elements[tid] = m.elements[tid+gap];
+            m.elements[tid+gap] = tmp;
+            *test_bool = false;
+            
+        }
+	}  
+	
+	
+	
+}
+
 __global__ static void combSortKernel(Matrix m) {
     int gap = m.width;
     bool sorted = false;
 
     while(!sorted) {
         gap = gap / 1.3;
+        //gap = gap / (1+0.3/2048.0);
         if(gap > 1) {
             sorted = false;
         } else {
@@ -785,8 +1052,10 @@ __global__ static void combSortKernel(Matrix m) {
             sorted = true;
         }
 
-        const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
-
+        const unsigned int tid = blockDim.x*2 * blockIdx.x + threadIdx.x;
+		if(blockIdx.x <= 2)
+			printf("%d * %d + %d = %d\n",blockDim.x * 2,blockIdx.x,threadIdx.x, tid);
+		
         if(tid + gap < m.width) {
             if(m.elements[tid] > m.elements[tid+gap]) {
                 float tmp = m.elements[tid];
@@ -798,6 +1067,50 @@ __global__ static void combSortKernel(Matrix m) {
         __syncthreads();
     }
 }
+
+__global__ static void evaluateEpsilonKernel(Matrix m, float epsilon, int* num_results){
+	
+	//~ __shared__ int num_results_shared;
+	//~ num_results_shared = 0;
+	//~ __syncthreads();
+	
+	const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
+	if(tid < m.width){
+		if( m.elements[tid] < epsilon){
+			atomicAdd(num_results,1);
+		}
+	}
+	
+	//~ __syncthreads();
+	//~ *num_results = num_results_shared;
+	
+}
+
+__device__ unsigned int select_index = 0;
+
+__global__ static void InitSelectionKernel(){
+	select_index = 0;
+}
+
+__global__ static void SelectionKernel(Matrix m, MatrixInt dest, float epsilon){
+	
+	
+	const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
+	if(tid < m.width){
+		if( m.elements[tid] < epsilon){
+			if(select_index < dest.width){
+				dest.elements[ atomicAdd(&select_index,1)  ] = tid;
+			}
+		}
+	}
+	
+	
+	
+	
+}
+
+
+
 
 
 __global__ static void SortKernel(Matrix m, int limit){
@@ -1051,7 +1364,7 @@ int main(int argc, char** argv)
 	//point vector ALLE PUNKTE
 	Matrix V;
 	V.height = 3;
-        V.width = 50000000;
+        V.width = 5000000;
 	std::cout << "points " << V.width << std::endl; 
 	V.stride = V.width;
 	mallocMatrix(V);
@@ -1067,8 +1380,6 @@ int main(int argc, char** argv)
 	// Matrix initialized
 	printMatrix(last_point_V);
 	
-	//point index for searching
-	int index = 1;
 	
 	//point for searchings
 	Matrix nn_point;
@@ -1076,158 +1387,60 @@ int main(int argc, char** argv)
 	nn_point.width = 1;
 	nn_point.stride = nn_point.width;
 	mallocMatrix(nn_point);
-	getColVecOfMatrix(V,index,nn_point);
-	std::cout << "pic point " << index << std::endl;
-	printMatrix(nn_point);
-	//neue variante ohne transformation
+	
+	
 	Matrix distance_vec;
 	distance_vec.height = 1;
 	distance_vec.width = V.width;
 	distance_vec.stride = distance_vec.width;
 	mallocMatrix(distance_vec);
 	
-	Distances(V,nn_point,distance_vec);
-	//printMatrix(distance_vec);
-	
-	cout << distance_vec.elements[distance_vec.width-1] << endl;
-
-	//transformation with point
-	//Matrix T;
-	//T.height = 4;
-	//T.width = 4;
-	//T.stride = T.width;
-	//mallocMatrix(T);
-	//fill3DTranslationMatrixRightCol(T,-nn_point.elements[0],-nn_point.elements[1],-nn_point.elements[2]);
-	// Transformation matrix initialized
+	int k = 10;
+	int index = 20000;
+	float initial_epsilon = 0.003792;
 	
 	
-	//Matrix V1;
-	//V1.height = V.height;
-	//V1.width = V.width;
-	//V1.stride = V1.width;
-	//mallocMatrix(V1);
+	MatrixInt indices_vec;
+	indices_vec.height = 1;
+	//indices_vec.width = num_shortes_distances;
+	indices_vec.width = k;
+	indices_vec.stride = indices_vec.width;
+	mallocMatrixInt(indices_vec);
+	//point index for searching
 	
+	float epsilon = initial_epsilon;
+	printf("START\n");
+	for(int i = 0;i<2000;i++){
+		
+		printf("\n%d\n",i);
+		getColVecOfMatrix(V,i,nn_point);
+		//~ std::cout << "pic point " << index << std::endl;
 	
-	//printMatrix(T);
-	//printMatrix(V);
+		Distances(V, nn_point, distance_vec);
+		
+		//~ printMatrix(distance_vec);
+		
+    
+		int num_shortes_distances = 0;
+    
+		epsilon = evaluateEpsilon( distance_vec, k, epsilon, num_shortes_distances);
+		//~ printf("epsilon found: %f, num_distances: %d\n",epsilon, num_shortes_distances);
+		printf("epsilon: %f\n",epsilon);
+    
+		getDistancesUnderEpsilon(distance_vec,indices_vec,epsilon);
+		
+		//~ printMatrixInt(indices_vec);
+    }
+    printf("END\n");
+    
+    //getDistancesUnderEpsilon(distance_vec,indices_vec,epsilon);
+	printMatrixInt(indices_vec);
 	
-	// Transformation
-	// auf großen punktmengen geht das nicht mehr
-	//MatMul(T,V,V1);
-
-	//Matrix last_point_V1;
-	//last_point_V1.height = 3;
-	//last_point_V1.width = 1;
-	//last_point_V1.stride = last_point_V1.width;
-	//mallocMatrix(last_point_V1);
-	//getColVecOfMatrix(V1,V1.width-1,last_point_V1);
-	// Matrix initialized
-	//printMatrix(last_point_V1);
-	
-	//self multiplication
-	//Matrix Vtransposed;
-	//Vtransposed.height = V1.width;
-	//Vtransposed.width = V1.height;
-	//Vtransposed.stride = Vtransposed.width;
-	//mallocMatrix(Vtransposed);
-	//transposeMatrix(V1,Vtransposed);
-	
-	//Matrix V2;
-	//V2.height = 1;
-	//V2.width = V1.width;
-	//V2.stride = V2.width;
-	//mallocMatrix(V2);
-
-	// Snow Shovel
-	//SelfScalar(V1, V2);
-
-
-	//Matrix last_point;
-	//last_point.height = 4;
-	//last_point.width = 1;
-	//last_point.stride = last_point.width;
-	//mallocMatrix(last_point);
-	//getColVecOfMatrix(V1,V1.width-1,last_point);
-	
-
-	//printMatrix(last_point);
-	//std::cout << "scalar: " << V2.elements[V2.width*V2.height-1] << std::endl;
-	
-	
-	
-	//printMatrix(V1);
-	//printMatrix(V2);	
-
-
-	Matrix sortedVector;
-	sortedVector.height = 1;
-	sortedVector.width = distance_vec.width;
-	sortedVector.stride = sortedVector.width;
-	mallocMatrix(sortedVector);
-
-	//printMatrix(distance_vec);
-	
-        //Sort2(distance_vec, sortedVector);
-	//naturalMergeSort(distance_vec);
-	//printMatrix(sortedVector);
-        combSort(distance_vec);
-        //printMatrix(distance_vec);
-	//std::cout << "Sorted Last Point: " << sortedVector.elements[sortedVector.width*sortedVector.height-1] << std::endl;
-	//printMatrix(V2);
-	//printMatrix(sortedVector);
-
-	//Sort(sortedVector,sortedVector);
-	//Sort(sortedVector,sortedVector);
-	//Sort(sortedVector,sortedVector);
-	
-	//printMatrix(sortedVector);
-	//Matrix Weights;
-	//Weights.height = Vtransposed.height;
-	//Weights.width = V1.width;
-	//Weights.stride = Vtransposed.width;
-	//mallocMatrix(Weights);
-	
-	
-	//printMatrix(Vtransposed);
-	//printMatrix(V1);
-	
-	//MatMul(Vtransposed,V1,Weights);
-	//std::cout << "last Weight" << Weights.elements[0] << std::endl;
-	//std::cout << "last Weight " << Weights.elements[Weights.width*Weights.height-1] << std::endl;
-	
-	//diagonal is distance
-	//printMatrix(Weights);
-	
-	
-	
-	//printDeviceInformation();
-	
-	
-	
-	
-	
-	//~ Matrix unsortedVector;
-	//~ unsortedVector.height = 1;
-	//~ unsortedVector.width = 12;
-	//~ unsortedVector.stride = unsortedVector.width;
-	//~ mallocMatrix(unsortedVector);
-	//~ fillMatrixWithRandomFloats(unsortedVector);
-	//~ printMatrix(unsortedVector);
-	
-	//~ naturalMergeSort(V2,50);
-
-	
-
+	std::cout << "FREE" << std::endl;
 	//~ free(unsortedVector.elements);
-	free(sortedVector.elements);
 	free(V.elements);
-	//free(Vtransposed.elements);
-	//free(T.elements);
-	//free(V1.elements);
-	//free(V2.elements);
-	//free(last_point.elements);
-	//free(last_point_V.elements);
-	//free(last_point_V1.elements);
+	free(distance_vec.elements);
+	free(indices_vec.elements);
 	free(nn_point.elements);
 	
 	return 0;
