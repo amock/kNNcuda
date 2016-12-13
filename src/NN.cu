@@ -26,6 +26,7 @@ typedef struct {
     int* elements;
 } MatrixInt;
 
+
 int m_mps = 0;
 int m_cuda_cores_per_mp = 0;
 int m_threads_per_mp = 0;
@@ -217,7 +218,6 @@ void getColVecOfMatrix(const Matrix& m, int index , Matrix& v_out){
 }
 
 
-
 // Forward declaration of the matrix multiplication kernel
 __global__ void MatMulKernel(const Matrix, const Matrix, Matrix);
 //TODO: test
@@ -239,8 +239,13 @@ __global__ static void InitSelectionKernel();
 
 __global__ void DistanceKernel(const Matrix A, const Matrix B, Matrix dest);
 
+__global__ void DistanceKernel2(const Matrix A, int index, Matrix dest);
+
 __global__ static void SortKernel2(Matrix m, int* slide_buffer, int num_slides, int limit = -1, int offset=0);
 
+__global__ static void SelectColKernel(Matrix m, Matrix dest, int index);
+
+	
 
 // Get a matrix element
 __device__ float GetElement(const Matrix A, int row, int col)
@@ -362,6 +367,33 @@ void SelfScalar(Matrix& A, Matrix& C)
 	cudaFree(d_C.elements);
 }
 
+void SelectColGPU(Matrix& D_V, Matrix& D_nn_point, int index, int width){
+
+	SelectColKernel<<<1, 1>>>(D_V, D_nn_point, index);
+
+}
+
+
+void DistancesGPU2(Matrix& D_V, Matrix& D_distance_vec, int index, int width)
+{
+	  
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (width +threadsPerBlock-1)/threadsPerBlock;
+
+	DistanceKernel2<<<blocksPerGrid, threadsPerBlock>>>(D_V, index, D_distance_vec);
+
+}
+
+void DistancesGPU(Matrix& D_V, Matrix& D_nn_point, Matrix& D_distance_vec, int width)
+{
+	  
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (width +threadsPerBlock-1)/threadsPerBlock;
+
+	DistanceKernel<<<blocksPerGrid, threadsPerBlock>>>(D_V, D_nn_point, D_distance_vec);
+
+}
+
 // without transform
 void Distances(Matrix& A, Matrix& B, Matrix& C)
 {
@@ -371,7 +403,7 @@ void Distances(Matrix& A, Matrix& B, Matrix& C)
 	size_t size = A.width * A.height * sizeof(float);
 	cudaMalloc(&d_A.elements, size);
 	cudaMemcpy(d_A.elements, A.elements, size,
-	       cudaMemcpyHostToDevice);         
+	       cudaMemcpyHostToDevice);
 
 	
 	Matrix d_B;
@@ -405,7 +437,7 @@ void Distances(Matrix& A, Matrix& B, Matrix& C)
 	cudaMemcpy(C.elements, d_C.elements, size,
 	       cudaMemcpyDeviceToHost);
 
-
+	
 	// Free device memory
 	cudaFree(d_A.elements);
 	cudaFree(d_B.elements);
@@ -469,6 +501,84 @@ void combSort2(Matrix& A) {
     cudaFree(D_ResultVector);
     
     free(H_ResultVector);
+}
+
+float EvaluateEpsilonGPU(Matrix& D_distance_vec, int width, int k, float epsilon, int* H_ResultVector, int* D_ResultVector, int tolerance = 0){
+	
+	
+	
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (width +threadsPerBlock-1)/threadsPerBlock;
+	*H_ResultVector = 0;
+	
+	
+	//~ clock_t calcstart, calcend;
+    //~ calcstart = clock();
+    
+    float change_factor = 0.1;
+    // epsilon *= (1+0.1)
+    // epsilon *= (1-0.1)
+    bool first_value = true;
+    bool epsilon_under = false;
+    
+	while( *H_ResultVector < k || *H_ResultVector > k + tolerance ) {
+	
+		*H_ResultVector = 0;
+		//num_results = 0;
+
+	
+		
+		
+		//~ clock_t calcstart, calcend;
+		//~ calcstart = clock();
+		
+		cudaMemcpy(D_ResultVector, H_ResultVector, sizeof(int), cudaMemcpyHostToDevice);
+		
+		
+		evaluateEpsilonKernel<<<blocksPerGrid, threadsPerBlock>>>(D_distance_vec, epsilon, D_ResultVector);
+	
+		
+		cudaMemcpy(H_ResultVector, D_ResultVector, sizeof(int), cudaMemcpyDeviceToHost);
+		
+		//~ calcend = clock();
+		//~ printf("Eval Iteration time GPU %f milliseconds \n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+		
+		
+	
+		//printf("found %d results for epsilon %f. k is %d\n", *H_ResultVector, epsilon, k);
+		
+		if( *H_ResultVector > k+tolerance){
+			epsilon *= (1.0-change_factor);
+			if(first_value){
+				//printf("first value is over limit\n");
+				epsilon_under = false;
+				first_value = false;
+			}else if(epsilon_under){
+				change_factor*=0.5;
+				//printf("over limit: change_factor changed to %f\n",change_factor);
+				epsilon_under = false;
+			}
+		} else if(*H_ResultVector < k) {
+			epsilon *= (1.0+change_factor);
+			if(first_value){
+				//printf("first value is under limit\n");
+				epsilon_under = true;
+				first_value = false;
+			}else if(!epsilon_under){
+				change_factor*=0.5;
+				//printf("under limit: change_factor changed to %f\n",change_factor);
+				epsilon_under = true;
+			}
+		}
+	
+	}
+	
+	//~ printf("\n");
+		
+		
+	
+	
+	return epsilon;
 }
 
 float evaluateEpsilon(Matrix& A, int k, float epsilon, int& num_distances, int tolerance = 0){
@@ -545,6 +655,21 @@ float evaluateEpsilon(Matrix& A, int k, float epsilon, int& num_distances, int t
 	cudaFree(D_ResultVector);
 	free(H_ResultVector);
 	return epsilon;
+}
+
+
+
+void GetDistancesUnderEpsilonGPU(Matrix& D_distance_vec, MatrixInt& D_indices_vec, int width, float epsilon){
+
+    
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (width + threadsPerBlock-1)/threadsPerBlock;
+    
+    InitSelectionKernel<<<1,1>>>();
+    SelectionKernel<<<blocksPerGrid, threadsPerBlock>>>(D_distance_vec, D_indices_vec, epsilon);
+	
+	
+    
 }
 
 void getDistancesUnderEpsilon(Matrix& A, MatrixInt& B, float epsilon){
@@ -700,7 +825,7 @@ void Sort2(Matrix& m, Matrix& dest, int limit=-1){
 	while(num_slides > 1){
 		
 	
-		if(num_slides <= 2){
+		if(num_slides > 2){
 			current_limit = limit;
 		}
 		
@@ -817,6 +942,15 @@ __global__ void SelfScalarKernel(Matrix A, Matrix Dest)
 	}
 }
 
+__global__ static void SelectColKernel(Matrix m, Matrix dest, int index){
+	const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
+	if(tid == 0){
+		for(int i=0;i< m.height;i++){
+			dest.elements[i] = m.elements[index + i * m.width];
+		}
+	}
+}
+
 //distance function without transformation
 __global__ void DistanceKernel(const Matrix points,const Matrix s_point, Matrix dest)
 {
@@ -832,6 +966,19 @@ __global__ void DistanceKernel(const Matrix points,const Matrix s_point, Matrix 
 		dest.elements[tid] = (points.elements[tid + 0 * points.width] - s_point.elements[0]) * (points.elements[tid + 0 * points.width] - s_point.elements[0]) 
 								+ (points.elements[tid + 1 * points.width] - s_point.elements[1]) * (points.elements[tid + 1 * points.width] - s_point.elements[1])
 								+ (points.elements[tid + 2 * points.width] - s_point.elements[2]) * (points.elements[tid + 2 * points.width] - s_point.elements[2]) ; 
+	}
+}
+
+//distance function without transformation
+__global__ void DistanceKernel2(const Matrix points,int index, Matrix dest)
+{
+	const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
+	
+	if(tid < points.width)
+	{
+		dest.elements[tid] = (points.elements[tid + 0 * points.width] - points.elements[index+ 0* points.width]) * (points.elements[tid + 0 * points.width] - points.elements[index+ 0* points.width] ) 
+								+ (points.elements[tid + 1 * points.width] - points.elements[index+ 1* points.width]) * (points.elements[tid + 1 * points.width] - points.elements[index+ 1* points.width] )
+								+ (points.elements[tid + 2 * points.width] - points.elements[index+ 2* points.width]) * (points.elements[tid + 2 * points.width] - points.elements[index+ 2* points.width] ) ; 
 	}
 }
 
@@ -1035,6 +1182,8 @@ __global__ static void combSortKernel(Matrix m) {
     }
 }
 
+
+
 __global__ static void evaluateEpsilonKernel(Matrix m, float epsilon, int* num_results){
 	
 	//~ __shared__ int num_results_shared;
@@ -1054,6 +1203,8 @@ __global__ static void evaluateEpsilonKernel(Matrix m, float epsilon, int* num_r
 }
 
 __device__ unsigned int select_index = 0;
+
+
 
 __global__ static void InitSelectionKernel(){
 	select_index = 0;
@@ -1308,7 +1459,7 @@ void naturalMergeSort(Matrix& m, int limit=-1){
 	free(slide_buffer);
 }
 
-int main(int argc, char** argv)
+int main2(int argc, char** argv)
 {
         getCudaInformation(m_mps, m_cuda_cores_per_mp, m_threads_per_mp, m_threads_per_block, m_size_thread_block, m_size_grid, m_device_global_memory);
 	std::cout << std::endl;
@@ -1410,6 +1561,8 @@ int main(int argc, char** argv)
 	free(indices_vec.elements);
 	free(nn_point.elements);
 	
+	
+	
 	/*
 	 * 1. Auf Arbeitsspeicher: V,indices_vec
 	 * 2. Auf GPU: D_V, D_nn_point, D_distance_vec, D_indices_vec
@@ -1418,17 +1571,261 @@ int main(int argc, char** argv)
 	 * 		a. index i wird zur GPU geschickt
 	 * 		b. Auf GPU:
 	 * 			speichere punkt D_V[i] in D_nn_point
+	 * 			Schneeschaufel: 
 	 * 			rechne mit D_V und D_nn_point Distanzen aus -> D_distance_vec
+	 * 			Scheiß auf Sortierung Sortierung:
 	 * 			schicke epsilon(initial) von CPU zu GPU evaluiere epsilon mit k -> epsilon
 	 * 			schicke epsilon von CPU zu GPU und bekomme k naechste nachbarn in D_indices_vec
 	 * 		c. Kopiere D_indices_vec zu Host -> indices_vec
 	 * 		
-	 * 
-	 * 		 
-	 * 
 	 */
 	
 	return 0;
+}
+
+int readNumPointsFromFile(const char* filename){
+	return 50;
+}
+
+void loadPointsFromFile(const char* filename, Matrix& V){
+	
+} 
+
+void generateHostMatrix(MatrixInt& m, int width, int height){
+	
+	m.height = height;
+	m.width = width;
+	m.stride = m.width;
+	mallocMatrixInt(m);
+	
+}
+
+void generateHostMatrix(Matrix& m, int width, int height){
+	
+	m.height = height;
+	m.width = width;
+	m.stride = m.width;
+	mallocMatrix(m);
+	
+}
+
+void generateDeviceMatrix(MatrixInt& D_m, int width, int height){
+	
+	D_m.width = D_m.stride = width;
+    D_m.height = height;
+    size_t size = D_m.width * D_m.height * sizeof(int);
+    cudaMalloc(&D_m.elements, size);
+    
+}
+
+void generateDeviceMatrix(Matrix& D_m, int width, int height){
+	
+    D_m.width = D_m.stride = width;
+    D_m.height = height;
+    size_t size = D_m.width * D_m.height * sizeof(float);
+    cudaMalloc(&D_m.elements, size);
+    
+}
+
+void generateDeviceMatrices(Matrix& D_V,Matrix& D_nn_point,Matrix& D_distance_vec, MatrixInt& D_indices_vec, int width, int height, int k){
+	
+	generateDeviceMatrix(D_V, width, height);
+	generateDeviceMatrix(D_nn_point, 1 , height);
+	generateDeviceMatrix(D_distance_vec, width, 1);
+	generateDeviceMatrix(D_indices_vec, k, 1);
+	
+}
+
+void copyToDeviceMatrix(Matrix& m, Matrix& D_m){
+	
+	size_t size = m.width * m.height * sizeof(float);
+    cudaMemcpy(D_m.elements, m.elements, size, cudaMemcpyHostToDevice);
+
+}
+
+void copyToDeviceMatrix(MatrixInt& m, MatrixInt& D_m){
+	
+	size_t size = m.width * m.height * sizeof(int);
+    cudaMemcpy(D_m.elements, m.elements, size, cudaMemcpyHostToDevice);
+
+}
+
+void copyToHostMatrix(Matrix& D_m, Matrix& m){
+	
+	size_t size = m.width * m.height * sizeof(float);
+	cudaMemcpy(m.elements, D_m.elements, size, cudaMemcpyDeviceToHost);
+	
+}
+
+void copyToHostMatrix(MatrixInt& D_m, MatrixInt& m){
+	
+	size_t size = m.width * m.height * sizeof(int);
+	cudaMemcpy(m.elements, D_m.elements, size, cudaMemcpyDeviceToHost);
+	
+}
+
+float kNNGpu(Matrix& D_V, Matrix& D_nn_point, Matrix& D_distance_vec, MatrixInt& D_indices_vec, int* H_ResultVector, int* D_ResultVector,
+					int width , int k, int index, float epsilon, int DEBUG = false)
+{
+	
+	clock_t calcstart, calcend;
+	if(DEBUG){
+		calcstart = clock();
+	}
+	
+	//SelectColGPU(D_V,D_nn_point,index,width);
+	
+	if(DEBUG){
+		calcend = clock();
+		printf("select GPU %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+	
+	
+		calcstart = clock();
+	}
+	//~ printf("%d\n",*H_ResultVector);
+	DistancesGPU2(D_V,D_distance_vec,index,width);
+	
+	if(DEBUG){
+		calcend = clock();
+		printf("Distances GPU %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+	
+		calcstart = clock();
+	}
+	
+	
+	epsilon = EvaluateEpsilonGPU(D_distance_vec,width,k,epsilon,H_ResultVector,D_ResultVector,5);
+	
+	if(DEBUG){
+		calcend = clock();
+		printf("evaluate epsilon GPU %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+	
+		calcstart = clock();
+	}
+	
+	
+	GetDistancesUnderEpsilonGPU(D_distance_vec,D_indices_vec,width,epsilon);
+	
+	if(DEBUG){
+		calcend = clock();
+		printf("get nearest points GPU %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+	}
+	
+	return epsilon;
+	
+}
+
+void freeCudaMatrices(Matrix& D_V, Matrix& D_nn_point, Matrix& D_distance_vec, MatrixInt& D_indices_vec){
+	
+	cudaFree(D_V.elements);
+	cudaFree(D_nn_point.elements);
+	cudaFree(D_distance_vec.elements);
+	cudaFree(D_indices_vec.elements);
+	
+}
+
+int main(int argc, char** argv)
+{
+	getCudaInformation(m_mps, m_cuda_cores_per_mp, m_threads_per_mp, m_threads_per_block, m_size_thread_block, m_size_grid, m_device_global_memory);
+	
+	
+	int k=50;
+	
+	const char * filename  = "points.ply";
+	
+	// Host Matrices
+	Matrix V;
+	MatrixInt indices_vec;
+	
+	// Device Matrices
+	Matrix D_V;
+	Matrix D_nn_point;
+	Matrix D_distance_vec;
+	MatrixInt D_indices_vec;
+	
+	//TODO: implement
+	//~ int num_points = readNumPointsFromFile(filename);
+	int num_points = 50000000;
+	
+	generateHostMatrix(V,num_points,3);
+	generateHostMatrix(indices_vec,k,1);
+	int* H_ResultVector = (int*)malloc(sizeof(int) );
+	//~ int* H_ResultVector;
+	//~ cudaMallocManaged(&H_ResultVector, sizeof(int) );
+	
+	//~ printf("%d\n",*H_ResultVector);
+	
+	//TODO:implement
+	//~ loadPointsFromFile(filename,V);
+	fillMatrixWithRandomFloats(V);
+	
+	
+	generateDeviceMatrices(D_V,D_nn_point,D_distance_vec,D_indices_vec,V.width,3,k);
+	int* D_ResultVector;
+	cudaMalloc((void**)&D_ResultVector, sizeof(int) );
+	
+	
+	
+	
+	copyToDeviceMatrix(V,D_V);
+	float epsilon = 0.5;
+	
+	int num_search_points = 1000;
+	//~ int num_search_points = num_points;
+	float progress = 0.0;
+	int barWidth = 70;
+	
+	int pos = barWidth * progress;
+	float last_epsilon=epsilon;
+	bool DEBUG = false;
+	clock_t knnstart, knnend;
+	knnstart = clock();
+	for(int i=0; i < num_search_points; i++)
+	{
+		
+		
+		clock_t calcstart, calcend;
+		if(DEBUG){
+			printf("\n");
+			calcstart = clock();
+		}
+		
+		epsilon = kNNGpu(D_V,D_nn_point,D_distance_vec,D_indices_vec,H_ResultVector,D_ResultVector,
+				V.width,k,i,epsilon,DEBUG);
+		copyToHostMatrix(D_indices_vec,indices_vec);
+		
+		if(DEBUG){
+			calcend = clock();
+		
+			printf("knn GPU %f milliseconds\n",(float)(calcend-calcstart)*1000.0 / CLOCKS_PER_SEC);
+		}
+	
+		
+		//printMatrixInt(indices_vec);
+		
+		if(!DEBUG){
+			progress = ((i+1) * 100)/(num_search_points) ;
+			std::cout << "Progress: " << progress << " % epsilon diff: " << epsilon-last_epsilon <<"\r";
+			std::cout.flush();
+		}
+		
+		last_epsilon=epsilon;
+		
+	}
+	std::cout << std::endl;
+	
+	knnend = clock();
+	
+	printf("finished knn search: %d datapoints, searched_points: %d , k = %d\n",num_points,num_search_points,k);
+	printf("total knn %f milliseconds\n",(float)(knnend-knnstart)*1000.0 / CLOCKS_PER_SEC);
+		
+	
+	
+	freeCudaMatrices(D_V,D_nn_point,D_distance_vec,D_indices_vec);
+	cudaFree(D_ResultVector);
+	free(V.elements);
+	free(indices_vec.elements);
+	free(H_ResultVector);
+	
 }
 
 
