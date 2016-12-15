@@ -521,7 +521,7 @@ float EvaluateEpsilonGPU(Matrix& D_distance_vec, int width, int k, float epsilon
     bool first_value = true;
     bool epsilon_under = false;
     
-	while( *H_ResultVector < k || *H_ResultVector > k + tolerance ) {
+        while( *H_ResultVector < k + 1 || *H_ResultVector > k + 1 + tolerance ) {
 	
 		*H_ResultVector = 0;
 		//num_results = 0;
@@ -547,7 +547,7 @@ float EvaluateEpsilonGPU(Matrix& D_distance_vec, int width, int k, float epsilon
 	
 		//printf("found %d results for epsilon %f. k is %d\n", *H_ResultVector, epsilon, k);
 		
-		if( *H_ResultVector > k+tolerance){
+                if( *H_ResultVector > k+1+tolerance){
 			epsilon *= (1.0-change_factor);
 			if(first_value){
 				//printf("first value is over limit\n");
@@ -558,7 +558,7 @@ float EvaluateEpsilonGPU(Matrix& D_distance_vec, int width, int k, float epsilon
 				//printf("over limit: change_factor changed to %f\n",change_factor);
 				epsilon_under = false;
 			}
-		} else if(*H_ResultVector < k) {
+                } else if(*H_ResultVector < k+1) {
 			epsilon *= (1.0+change_factor);
 			if(first_value){
 				//printf("first value is under limit\n");
@@ -1215,7 +1215,7 @@ __global__ static void SelectionKernel(Matrix m, MatrixInt dest, float epsilon){
 	
 	const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
 	if(tid < m.width){
-		if( m.elements[tid] < epsilon){
+                if( 0 < m.elements[tid] && m.elements[tid] < epsilon){
 			if(select_index < dest.width){
 				dest.elements[ atomicAdd(&select_index,1)  ] = tid;
 			}
