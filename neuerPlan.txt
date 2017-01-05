@@ -1,0 +1,16 @@
+seriell:
+kd-baum struktur als array 
+testen ob alles wieder freigegeben wird (kein problem mit array)
+punkte: indices -> kd-baum
+
+punkte -> GPU
+kd-baum array -> GPU 
+ergebnis normalen-vector liste -> GPU
+
+kernel startet alle kNN-suchen:
+theadidx+blabla muss bis anzahl der punkte gehen!
+jeder thread kümmert sich um eine kNN-Suche
+kNN-Suche findet k nächste nachbarn. normalen berechnung mit k-nächsten nachbarn 
+-> speichern der berechneten normalen in ergebnis normalen-vector liste an richtigen eintrag
+
+ergebnis normalen-vector liste -> Arbeitsspeicher
