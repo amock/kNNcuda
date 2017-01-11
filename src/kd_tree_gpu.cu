@@ -4,7 +4,15 @@
 #include <vector>
 #include <math.h>
 #include <float.h>
+#include "../include/helper_cuda.h"
 
+int m_mps = 0;
+int m_cuda_cores_per_mp = 0;
+int m_threads_per_mp = 0;
+int m_threads_per_block = 0;
+int* m_size_thread_block = new int(3);
+int* m_size_grid = new int(3);
+unsigned long long m_device_global_memory = 0;
 
 struct betterKdTree {
 	//node and leef
@@ -45,6 +53,8 @@ void printMatrix(Matrix& m)
 }
 
 
+
+
 void mallocMatrix(Matrix& m){
 	m.elements = (float*)malloc(m.width * m.height * sizeof(float));
 }
@@ -57,6 +67,30 @@ void generateHostMatrix(Matrix& m, int width, int height){
 	m.width = width;
 	m.stride = m.width;
 	m.elements = (float*)malloc(m.width * m.height * sizeof(float) );
+	
+}
+
+void generateDeviceMatrix(Matrix& D_m, int width, int height){
+	
+    D_m.width = D_m.stride = width;
+    D_m.height = height;
+    size_t size = D_m.width * D_m.height * sizeof(float);
+    cudaMalloc(&D_m.elements, size);
+    
+}
+
+void copyToDeviceMatrix(Matrix& m, Matrix& D_m){
+	
+	size_t size = m.width * m.height * sizeof(float);
+    cudaMemcpy(D_m.elements, m.elements, size, cudaMemcpyHostToDevice);
+
+}
+
+void copyToHostMatrix(Matrix& D_m, Matrix& m){
+	
+	size_t size = m.width * m.height * sizeof(float);
+	printf("size: %d\n", (int)size);
+	cudaMemcpy(m.elements, D_m.elements, size, cudaMemcpyDeviceToHost);
 	
 }
 
@@ -88,44 +122,32 @@ void copyVectorInterval(Matrix& in,int start, int end, Matrix& out){
 	}
 }
 
-void copyVectorValuesUnderOverLimit(Matrix& V, MatrixInt in, float limit, float median, int dim, Matrix& outUnder, Matrix& outOver){
-	int i_l = 0;
-	int i_r = 0;
-	for(int i=0; i < in.width; i++){
-		
-		if(in.elements[i] > V.width){
-			printf("in.elements[%d] = %d\n",i,in.elements[i]);
-		}
-		
-		
-		if( V.elements[ dim*V.width + in.elements[i] ] <= limit && i_l < outUnder.width ){
-			//~ printf("V[dim:%d][%d] : %f < %f\n",dim,in.elements[i],V.elements[ dim*V.width + in.elements[i] ],limit);
-			outUnder.elements[i_l++] = in.elements[i];
-			
-		}else{
-			outOver.elements[i_r++] = in.elements[i];
-		}
-		
-	}
-	
-	if(i_r < outOver.width || i_l < outUnder.width){
-		printf("AAAR total_indices: %d, median: %d, split: %f\n", in.width, median, limit);
-		for(int i=0; i < in.width; i++){
-			printf("in.elements[%d] = %d, value: %f\n", i, in.elements[i], V.elements[dim*V.width +in.elements[i] ]);
-		}
-		
-		for(int i=0; i< outUnder.width; i++){
-			printf("outUnder.elements[%d] = %d\n", i, outUnder.elements[i]);
-		}
-		
-		for(int i=0; i< outOver.width; i++){
-			printf("outOver.elements[%d] = %d\n", i, outOver.elements[i]);
-		}
-		
-		throw 20;
-	}
-}
 
+
+
+__global__ void KNNKernel(const Matrix D_V, const Matrix D_kd_tree, Matrix D_Result_Normals, int k=50);
+
+
+
+void getCudaInformation(int& mps, int& cuda_cores_per_mp, int& threads_per_mp, int& threads_per_block, int* size_thread_block, int* size_grid , unsigned long long& device_global_memory){
+	cudaSetDevice(0);
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, 0);
+    
+    
+    mps = deviceProp.multiProcessorCount;
+    cuda_cores_per_mp = _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor);
+    threads_per_mp = deviceProp.maxThreadsPerMultiProcessor;
+    threads_per_block = deviceProp.maxThreadsPerBlock;
+    size_thread_block[0] = deviceProp.maxThreadsDim[0];
+    size_thread_block[1] = deviceProp.maxThreadsDim[1];
+    size_thread_block[2] = deviceProp.maxThreadsDim[2];
+    size_grid[0] = deviceProp.maxGridSize[0];
+    size_grid[1] = deviceProp.maxGridSize[1];
+    size_grid[2] = deviceProp.maxGridSize[2];
+    device_global_memory = (unsigned long long) deviceProp.totalGlobalMem;
+    
+}
 
 
 void mergeHostWithIndices(float* a, float* b, int i1, int j1, int i2, int j2,int limit=-1){
@@ -305,16 +327,6 @@ void splitMatrixWithValue(Matrix& V, Matrix& I, Matrix& I_L, Matrix& I_R, int cu
 		printf("WARNING right %d != %d\n",i_r,I_R.width);
 	}
 		
-		//~ if(V.elements[current_dim*V.width + static_cast<int>(I.elements[i]) ] <= value && ){
-			//~ printf("I_L.elements[%d] = %f\n", i_l, I.elements[i]);
-			//~ I_L.elements[i_l++] = I.elements[i];
-		//~ }else{
-			//~ printf("I_R.elements[%d] = %f\n", i_r, I.elements[i]);
-			//~ I_R.elements[i_r++] = I.elements[i];
-		//~ }
-		
-	//~ }
-	//~ printf("\n");
 }
 
 void generateKdTreeRecursive(Matrix& V, Matrix* sorted_indices, int current_dim, int max_dim, Matrix& kd_tree, int size, int max_tree_depth, int position){
@@ -326,7 +338,7 @@ void generateKdTreeRecursive(Matrix& V, Matrix* sorted_indices, int current_dim,
 		//
 		
 		kd_tree.elements[position] = sorted_indices[current_dim].elements[0];
-		printf("leaf! pos: %d val: %f\n",position, kd_tree.elements[position]);
+		//~ printf("leaf! pos: %d val: %f\n",position, kd_tree.elements[position]);
 		
 	}else{
 		/// split sorted_indices
@@ -384,7 +396,7 @@ void generateKdTreeRecursive(Matrix& V, Matrix* sorted_indices, int current_dim,
 }
 
 void generateKdTreeArray(Matrix& V, Matrix* sorted_indices, int max_dim, Matrix& kd_tree, int& size, int& max_tree_depth){
-	printf("START\n");
+	
 	
 	max_tree_depth = static_cast<int>(log2f(V.width-1)+2.0) ;
 	int max_leaf_size = static_cast<int>(pow(2,max_tree_depth) );
@@ -405,9 +417,102 @@ void generateKdTreeArray(Matrix& V, Matrix* sorted_indices, int max_dim, Matrix&
 	
 }
 
+// Get a matrix element
+__device__ int GetKdTreePosition(const Matrix& D_kd_tree, float x, float y, float z)
+{
+	int pos = 0;
+	int current_dim = 0;
+	while(pos*2+1 < D_kd_tree.width){
+		if(current_dim == 0){
+			if(x <= D_kd_tree.elements[pos] ){
+				pos = pos*2+1;
+			}else{
+				pos = pos*2+2;
+			}
+			
+			current_dim += 1;
+		}else if(current_dim == 1){
+			if(y <= D_kd_tree.elements[pos] ){
+				pos = pos*2+1;
+			}else{
+				pos = pos*2+2;
+			}
+			
+			current_dim +=1;
+		}else{
+			if(z <= D_kd_tree.elements[pos] ){
+				pos = pos*2+1;
+			}else{
+				pos = pos*2+2;
+			}
+			
+			current_dim = 0;
+		}
+		
+	}
+	
+    return pos;
+}
+
+__device__ float SearchQueryPoint(const Matrix& D_kd_tree, float x, float y, float z){
+	return D_kd_tree.elements[GetKdTreePosition(D_kd_tree, x, y, z)];
+}
+
+__device__ void calculateNormalFromSubtree(const Matrix& D_V, const Matrix& D_kd_tree, int sub_tree_index, float& x,float& y,float& z){
+	x = 1.0;
+	y = 1.0;
+	z = 1.0;
+} 
+
+//distance function without transformation
+__global__ void KNNKernel(const Matrix D_V, const Matrix D_kd_tree, Matrix D_Result_Normals, int k)
+{
+	const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
+	
+	if(tid < D_V.width){
+		
+		int pos = GetKdTreePosition(D_kd_tree, D_V.elements[tid], D_V.elements[D_V.width + tid], D_V.elements[D_V.width*2 + tid] );
+		
+		float val = SearchQueryPoint(D_kd_tree, D_V.elements[tid], D_V.elements[D_V.width + tid], D_V.elements[D_V.width*2 + tid] );
+		
+		float result_x = 0.0;
+		float result_y = 0.0;
+		float result_z = 0.0;
+		calculateNormalFromSubtree(D_V, D_kd_tree, pos, result_x, result_y, result_z);
+		
+		//~ D_Result_Normals.elements[tid] = result_x;
+		//~ D_Result_Normals.elements[D_Result_Normals.width + tid] = result_y;
+		//~ D_Result_Normals.elements[D_Result_Normals.width*2 +tid] = result_z;
+		printf("result_x %f\n",D_Result_Normals.elements[tid]);
+		D_Result_Normals.elements[tid] = 1.0;
+		printf("result_x %f\n",D_Result_Normals.elements[tid]);
+		printf("query result: %f \n");
+		
+	}
+	
+}
+
+void GPU_NN(Matrix& D_V, Matrix& D_kd_tree, Matrix& D_Result_Normals, Matrix& Result_Normals){
+	printf("START\n");
+	
+	int threadsPerBlock = m_threads_per_block;
+	int blocksPerGrid = (D_V.width + threadsPerBlock-1)/threadsPerBlock;
+
+	KNNKernel<<<blocksPerGrid, threadsPerBlock>>>(D_V, D_kd_tree, D_Result_Normals);
+	cudaDeviceSynchronize();
+	
+	size_t size = Result_Normals.width * Result_Normals.height * sizeof(float);
+	printf("size: %d\n", (int)size);
+	
+	cudaMemcpy(Result_Normals.elements, D_Result_Normals.elements, size, cudaMemcpyDeviceToHost);
+	
+	printf("END\n");
+}
+
 
 int main(int argc, char** argv)
 {
+	getCudaInformation(m_mps, m_cuda_cores_per_mp, m_threads_per_mp, m_threads_per_block, m_size_thread_block, m_size_grid, m_device_global_memory);
 	
 	const char * filename  = "points.ply";
 	
@@ -422,14 +527,18 @@ int main(int argc, char** argv)
 	int k=50;
 	int dim_points = 3;
 	
-	Matrix V;
+	Matrix V,Result_Normals;
 	struct Matrix test;
 	struct Matrix indices_sorted[point_dim];
 	struct Matrix values_sorted[point_dim];
 	
 	generateHostMatrix(test, num_points, 1);
 	generateHostMatrix( V, num_points, point_dim);
+	generateHostMatrix( Result_Normals, num_points, point_dim);
 	fillMatrixWithRandomFloats( V);
+	fillMatrixWithRandomFloats( Result_Normals);
+	
+	
 	
 	for(int i=0; i < point_dim; i++)
 	{
@@ -456,8 +565,32 @@ int main(int argc, char** argv)
 	//~ printMatrix(V);
 	printf("End generating kd-tree array based\n");
 	
-	printf("Free kd_tree array\n");
-	free(kd_tree.elements);
+	
+	//push values to device
+	//push kd_tree to device
+	//DEVICE STUFF
+	Matrix D_V, D_kd_tree, D_Result_Normals;
+	generateDeviceMatrix( D_V, V.width, V.height );
+	generateDeviceMatrix( D_kd_tree, kd_tree.width, kd_tree.height);
+	generateDeviceMatrix( D_Result_Normals, Result_Normals.width, Result_Normals.height);
+	
+	//COPY STUFF
+	copyToDeviceMatrix( V, D_V);
+	copyToDeviceMatrix( kd_tree, D_kd_tree);
+	copyToDeviceMatrix( Result_Normals, D_Result_Normals);
+	
+	
+	//Cuda Kernels
+	GPU_NN(D_V, D_kd_tree, D_Result_Normals, Result_Normals);
+	
+	
+	
+	printMatrix(Result_Normals);
+	
+	cudaFree(D_V.elements);
+	cudaFree(D_kd_tree.elements);
+	cudaFree(D_Result_Normals.elements);
+	
 	
 	for(int i=0; i<point_dim;i++)
 	{
@@ -470,4 +603,7 @@ int main(int argc, char** argv)
 	
 	free(V.elements);
 	free(test.elements);
+	free(Result_Normals.elements);
+	printf("Free kd_tree array\n");
+	free(kd_tree.elements);
 }
