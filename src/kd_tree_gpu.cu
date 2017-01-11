@@ -26,6 +26,25 @@ struct MatrixInt {
     int* elements;
 };
 
+void printMatrix(Matrix& m)
+{
+	int i;
+	//int j;
+	for(i=0;i<m.width*m.height;i++)
+	{
+		if(i%m.width == 0){
+			printf("|");
+		}
+		printf(" %f ",*(m.elements + i ));
+		if(i%m.width == m.width-1){
+			printf("|\n");
+		}
+	}
+	
+	printf("\n");
+}
+
+
 void mallocMatrix(Matrix& m){
 	m.elements = (float*)malloc(m.width * m.height * sizeof(float));
 }
@@ -33,10 +52,11 @@ void mallocMatrix(Matrix& m){
 
 void generateHostMatrix(Matrix& m, int width, int height){
 	
+	
 	m.height = height;
 	m.width = width;
 	m.stride = m.width;
-	mallocMatrix(m);
+	m.elements = (float*)malloc(m.width * m.height * sizeof(float) );
 	
 }
 
@@ -68,7 +88,7 @@ void copyVectorInterval(Matrix& in,int start, int end, Matrix& out){
 	}
 }
 
-void copyVectorValuesUnderOverLimit(Matrix& V, MatrixInt in, float limit, int median, int dim, MatrixInt& outUnder, MatrixInt& outOver){
+void copyVectorValuesUnderOverLimit(Matrix& V, MatrixInt in, float limit, float median, int dim, Matrix& outUnder, Matrix& outOver){
 	int i_l = 0;
 	int i_r = 0;
 	for(int i=0; i < in.width; i++){
@@ -229,39 +249,165 @@ void sortByDim(Matrix& V, int dim, Matrix& indices, Matrix& values){
 	naturalMergeSort(V, dim, indices, values);
 }
 
-void calculateMedian(Matrix& V, Matrix& indices, int current_dim, float& median_index, float& median_value) {
-	median_index = indices.elements[indices.width/2];
+void calculateMedian(Matrix& V, Matrix& indices, int current_dim, float& median_index, float& median_value, int num_medians) {
+	
+	median_index = indices.elements[indices.width/2+1];
 	median_value = V.elements[V.width*current_dim+(int)median_index];
+}
+
+
+
+void splitMatrix(Matrix& I, Matrix& I_L, Matrix& I_R){
+	
+	int i=0;
+	for(; i<I_L.width; i++){
+		I_L.elements[i] = I.elements[i];
+	}
+	int j=0;
+	for(; i<I.width && j<I_R.width; i++, j++){
+		I_R.elements[j] = I.elements[i];
+	}
+	
+}
+
+void splitMatrixWithValue(Matrix& V, Matrix& I, Matrix& I_L, Matrix& I_R, int current_dim, float value){
+	int i_l = 0;
+	int i_r = 0;
+	
+	//~ printMatrix(V);
+	//~ printMatrix(I);
+	
+	//~ printf("split by value: %f\n",value);
+	//~ printf("splitting array (%d) to (%d, %d) with value %f\n",I.width,I_L.width,I_R.width,value);
+	for(int i=0; i<I.width; i++){
+		float current_value = V.elements[current_dim*V.width + static_cast<int>(I.elements[i]+0.5) ];
+		//~ printf("curr val: %f\n", current_value);
+		if(current_value <= value && I_L.width > i_l ){
+			//~ printf("add to left: %f with value %f\n", I.elements[i], current_value);
+			I_L.elements[i_l++] = I.elements[i];
+		}else if(current_value >= value && I_R.width > i_r){
+			//~ printf("add to right: %f with value %f\n", I.elements[i], current_value);
+			I_R.elements[i_r++] = I.elements[i];
+		}else {
+			if(i_r<I_R.width){
+				I_R.elements[i_r++] = I.elements[i];
+			}else if(i_l<I_L.width){
+				I_L.elements[i_l++] = I.elements[i];
+			}
+		}
+	}
+	
+	if(i_l != I_L.width){
+		printf("WARNING left %d != %d\n",i_l,I_L.width);
+	}
+	
+	if(i_r != I_R.width){
+		printf("WARNING right %d != %d\n",i_r,I_R.width);
+	}
+		
+		//~ if(V.elements[current_dim*V.width + static_cast<int>(I.elements[i]) ] <= value && ){
+			//~ printf("I_L.elements[%d] = %f\n", i_l, I.elements[i]);
+			//~ I_L.elements[i_l++] = I.elements[i];
+		//~ }else{
+			//~ printf("I_R.elements[%d] = %f\n", i_r, I.elements[i]);
+			//~ I_R.elements[i_r++] = I.elements[i];
+		//~ }
+		
+	//~ }
+	//~ printf("\n");
+}
+
+void generateKdTreeRecursive(Matrix& V, Matrix* sorted_indices, int current_dim, int max_dim, Matrix& kd_tree, int size, int max_tree_depth, int position){
+	
+	int left = position*2+1;
+	int right = position*2+2;
+	
+	if(right > size-1 || left > size-1){
+		//
+		
+		kd_tree.elements[position] = sorted_indices[current_dim].elements[0];
+		printf("leaf! pos: %d val: %f\n",position, kd_tree.elements[position]);
+		
+	}else{
+		/// split sorted_indices
+		int indices_size = sorted_indices[current_dim].width;
+		
+		// calculate left balanced sizes
+		int next_pot = static_cast<int>(log2f(indices_size-1));
+		int right_size = pow(2,next_pot-1);
+		int left_size = indices_size - right_size;
+		int val_next_pot = pow(2,next_pot);
+		if( left_size > val_next_pot ){
+			right_size += left_size - val_next_pot;
+			left_size = val_next_pot;
+		}
+		
+		float split_value = (V.elements[current_dim*V.width+static_cast<int>(sorted_indices[current_dim].elements[left_size-1]) ] + V.elements[current_dim*V.width+static_cast<int>(sorted_indices[current_dim].elements[left_size] ) ] ) /2.0;
+		
+		kd_tree.elements[position] = split_value;
+		
+		struct Matrix sorted_indices_left[max_dim];
+		struct Matrix sorted_indices_right[max_dim];
+		
+		// alloc new memory
+		for(int i=0; i<max_dim; i++){
+			//memory corruption when malloc 
+			
+			sorted_indices_left[i].width = left_size;
+			sorted_indices_left[i].height = 1;
+			sorted_indices_left[i].elements = (float*)malloc( (left_size+1) *sizeof(float) );
+			
+			sorted_indices_right[i].width = right_size;
+			sorted_indices_right[i].height = 1;
+			sorted_indices_right[i].elements = (float*)malloc( (right_size+1) * sizeof(float) );
+			
+			if(i==current_dim){
+				splitMatrix(sorted_indices[i], sorted_indices_left[i], sorted_indices_right[i]);
+			}else{
+				splitMatrixWithValue(V, sorted_indices[i], sorted_indices_left[i], sorted_indices_right[i], current_dim, split_value);
+			}
+			
+		}
+		
+		generateKdTreeRecursive(V, sorted_indices_left, (current_dim+1)%max_dim, max_dim, kd_tree, size, max_tree_depth, left);
+		generateKdTreeRecursive(V, sorted_indices_right, (current_dim+1)%max_dim, max_dim, kd_tree, size, max_tree_depth, right);		
+	
+		
+		// alloc new memory
+		for(int i=0; i<max_dim; i++){
+			free(sorted_indices_left[i].elements);
+			free(sorted_indices_right[i].elements);
+		}
+	}
+	
+	
 }
 
 void generateKdTreeArray(Matrix& V, Matrix* sorted_indices, int max_dim, Matrix& kd_tree, int& size, int& max_tree_depth){
 	printf("START\n");
+	
 	max_tree_depth = static_cast<int>(log2f(V.width-1)+2.0) ;
+	int max_leaf_size = static_cast<int>(pow(2,max_tree_depth) );
+	
 	if(V.width == 1){
 		max_tree_depth = 1;
 	}
 	printf("tree depth: %d\n",max_tree_depth);
 	
-	size = pow(2, max_tree_depth) - 1;
+	size = V.width*2-1;
 	
 	printf("calulated kd-tree size: %d\n",size);
 	generateHostMatrix(kd_tree, size, 1);
 	
+	//start real generate
+	generateKdTreeRecursive(V, sorted_indices, 0 ,max_dim, kd_tree, size, max_tree_depth, 0);
 	
-	float median_index, median_value;
-	int current_dim = 0;
-	for(int i = 0; i<max_tree_depth; i++){
-		current_dim = i%max_dim;
-		calculateMedian(V, sorted_indices[current_dim], current_dim, median_index, median_value);
-		printf("dim: %d: Median Index: %f, Value: %f\n", current_dim, median_index, median_value);
-	}
 	
 }
 
 
 int main(int argc, char** argv)
 {
-	printf("Hello World!\n");
 	
 	const char * filename  = "points.ply";
 	
@@ -296,7 +442,7 @@ int main(int argc, char** argv)
 		
 		sortByDim( V, i, indices_sorted[i] , values_sorted[i]);
 	}
-	
+	//~ printMatrix(V);
 	
 	printf("Start generating kd-tree array based\n");
 	//sorted indices + values
@@ -307,6 +453,7 @@ int main(int argc, char** argv)
 	
 	generateKdTreeArray(V, indices_sorted, dim_points, kd_tree, size, max_tree_depth);
 	
+	//~ printMatrix(V);
 	printf("End generating kd-tree array based\n");
 	
 	printf("Free kd_tree array\n");
