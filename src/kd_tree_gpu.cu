@@ -4,7 +4,20 @@
 #include <vector>
 #include <math.h>
 #include <float.h>
+#include <stdint.h>
+#include "boost/shared_array.hpp"
+#include "../include/rply/rply.h"
 #include "../include/helper_cuda.h"
+
+
+typedef boost::shared_array<unsigned int> uintArr;
+
+
+typedef boost::shared_array<float> floatArr;
+
+
+typedef boost::shared_array<unsigned char> ucharArr;
+
 
 int m_mps = 0;
 int m_cuda_cores_per_mp = 0;
@@ -485,6 +498,7 @@ __device__ void calculateNormalFromSubtree(const Matrix& D_V, const Matrix& D_kd
 	bool leaf_reached = false;
 	int i_nn = 0;
 	float * nn_vecs = (float*)malloc(3*k*sizeof(float)+1);
+	bool k_reached = false;
 
 	for(;iterator < D_kd_tree.width; iterator=iterator*2+1, max_nodes*=2)
 	{
@@ -496,9 +510,6 @@ __device__ void calculateNormalFromSubtree(const Matrix& D_V, const Matrix& D_kd
 			
 			if(leaf_reached && i_nn <= k*3){
 				
-				
-				
-				
 				if(leaf_value != pos_value){
 					//~ printf("index: %d, neighbor_index: %d\n",pos_value,leaf_value);
 					//~ printf("tree_index: %d, tree_neighbor_index: %d\n",pos,current_pos);
@@ -508,7 +519,6 @@ __device__ void calculateNormalFromSubtree(const Matrix& D_V, const Matrix& D_kd
 					i_nn += 3;
 				}
 			}else if(current_pos*2+1 >= D_kd_tree.width){
-				
 				
 				//first leaf reached 
 				leaf_reached = true;
@@ -521,6 +531,16 @@ __device__ void calculateNormalFromSubtree(const Matrix& D_V, const Matrix& D_kd
 					i_nn += 3;
 				}
 			}
+			
+			if(i_nn>k*3){
+				k_reached = true;
+				break;
+			}
+		}
+		
+		
+		if(k_reached){
+			break;
 		}
 	}
 	
@@ -533,6 +553,8 @@ __device__ void calculateNormalFromSubtree(const Matrix& D_V, const Matrix& D_kd
 	// what now? 
 	// PCA?
 	// minimize plane error:
+	
+	
 	for(int i=3; i<k*3; i+=3){
 		// cross product
 		
@@ -550,7 +572,7 @@ __device__ void calculateNormalFromSubtree(const Matrix& D_V, const Matrix& D_kd
 		
 		float cum_dist = 0.0;
 		for(int j=0; j<k*3; j+=3){
-			cum_dist += (n_x * nn_vecs[j] + n_y * nn_vecs[j+1] + n_z * nn_vecs[j+2]);
+			cum_dist += abs(n_x * nn_vecs[j] + n_y * nn_vecs[j+1] + n_z * nn_vecs[j+2]);
 		}
 		
 		if(cum_dist < min_dist){
@@ -566,6 +588,9 @@ __device__ void calculateNormalFromSubtree(const Matrix& D_V, const Matrix& D_kd
 		last_vec[2] = nn_vecs[i+2];
 		
 	}
+	
+	//instead of minimize plane error:
+	// take normal with maximum of inliers (RANSAC like)
 	
 	free(last_vec);
 	free(nn_vecs);
@@ -643,12 +668,452 @@ void GPU_NN(Matrix& D_V, Matrix& D_kd_tree, Matrix& D_Result_Normals, Matrix& Re
 	printf("END\n");
 }
 
+int readVertexCb( p_ply_argument argument )
+{
+    float ** ptr;
+    ply_get_argument_user_data( argument, (void **) &ptr, NULL );
+    **ptr = ply_get_argument_value( argument );
+    (*ptr)++;
+    return 1;
+
+}
+
+int readColorCb( p_ply_argument argument )
+{
+
+    uint8_t ** color;
+    ply_get_argument_user_data( argument, (void **) &color, NULL );
+    **color = ply_get_argument_value( argument );
+    (*color)++;
+    return 1;
+
+}
+
+int readFaceCb( p_ply_argument argument )
+{
+
+    unsigned int ** face;
+    long int length, value_index;
+    ply_get_argument_user_data( argument, (void **) &face, NULL );
+    ply_get_argument_property( argument, NULL, &length, &value_index );
+    if ( value_index < 0 )
+    {
+        /* We got info about amount of face vertices. */
+        if ( ply_get_argument_value( argument ) == 3 )
+        {
+            return 1;
+        }
+        std::cerr  << "Mesh is not a triangle mesh." << std::endl;
+        return 0;
+    }
+    **face = ply_get_argument_value( argument );
+    (*face)++;
+
+    return 1;
+
+}
+
+void readPlyFile(Matrix& V, const char* filename ,  bool readColor =true, bool readConfidence=true,
+        bool readIntensity=true, bool readNormals=true, bool readFaces=true){
+	/* Start reading new PLY */
+    p_ply ply = ply_open( filename, NULL, 0, NULL );
+
+    if ( !ply )
+    {
+       std::cerr  << "Could not open »" << filename << "«."
+           << std::endl;
+        return ;
+    }
+    if ( !ply_read_header( ply ) )
+    {
+       std::cerr  << "Could not read header." << std::endl;
+        return;
+    }
+    std::cout  << "Loading »" << filename << "«." << std::endl;
+
+    /* Check if there are vertices and get the amount of vertices. */
+    char buf[256] = "";
+    const char * name = buf;
+    long int n;
+    p_ply_element elem  = NULL;
+
+    // Buffer count variables
+    size_t numVertices              = 0;
+    size_t numVertexColors          = 0;
+    size_t numVertexConfidences     = 0;
+    size_t numVertexIntensities     = 0;
+    size_t numVertexNormals         = 0;
+
+    size_t numPoints                = 0;
+    size_t numPointColors           = 0;
+    size_t numPointConfidence       = 0;
+    size_t numPointIntensities      = 0;
+    size_t numPointNormals          = 0;
+    size_t numFaces                 = 0;
+
+    while ( ( elem = ply_get_next_element( ply, elem ) ) )
+    {
+        ply_get_element_info( elem, &name, &n );
+        if ( !strcmp( name, "vertex" ) )
+        {
+            numVertices = n;
+            p_ply_property prop = NULL;
+            while ( ( prop = ply_get_next_property( elem, prop ) ) )
+            {
+                ply_get_property_info( prop, &name, NULL, NULL, NULL );
+                if ( !strcmp( name, "red" ) && readColor )
+                {
+                    /* We have color information */
+                    numVertexColors = n;
+                }
+                else if ( !strcmp( name, "confidence" ) && readConfidence )
+                {
+                    /* We have confidence information */
+                    numVertexConfidences = n;
+                }
+                else if ( !strcmp( name, "intensity" ) && readIntensity )
+                {
+                    /* We have intensity information */
+                    numVertexIntensities = n;
+                }
+                else if ( !strcmp( name, "nx" ) && readNormals )
+                {
+                    /* We have normals */
+                    numVertexNormals = n;
+                }
+            }
+        }
+        else if ( !strcmp( name, "point" ) )
+        {
+            numPoints = n;
+            p_ply_property prop = NULL;
+            while ( ( prop = ply_get_next_property( elem, prop ) ) )
+            {
+                ply_get_property_info( prop, &name, NULL, NULL, NULL );
+                if ( !strcmp( name, "red" ) && readColor )
+                {
+                    /* We have color information */
+                    numPointColors = n;
+                }
+                else if ( !strcmp( name, "confidence" ) && readConfidence )
+                {
+                    /* We have confidence information */
+                    numPointConfidence = n;
+                }
+                else if ( !strcmp( name, "intensity" ) && readIntensity )
+                {
+                    /* We have intensity information */
+                    numPointIntensities = n;
+                }
+                else if ( !strcmp( name, "nx" ) && readNormals )
+                {
+                    /* We have normals */
+                    numPointNormals = n;
+                }
+            }
+        }
+        else if ( !strcmp( name, "face" ) && readFaces )
+        {
+            numFaces = n;
+        }
+    }
+
+    if ( !( numVertices || numPoints ) )
+    {
+        std::cout << "Neither vertices nor points in ply."
+            << std::endl;
+        return ;
+    }
+
+    // Buffers
+    floatArr vertices;
+    floatArr vertexConfidence;
+    floatArr vertexIntensity;
+    floatArr vertexNormals;
+    floatArr points;
+    floatArr pointConfidences;
+    floatArr pointIntensities;
+    floatArr pointNormals;
+
+    ucharArr pointColors;
+	ucharArr vertexColors;
+    uintArr  faceIndices;
+
+
+    /* Allocate memory. */
+    if ( numVertices )
+    {
+        vertices = floatArr( new float[ numVertices * 3 ] );
+    }
+    if ( numVertexColors )
+    {
+        vertexColors = ucharArr( new unsigned char[ numVertices * 3 ] );
+    }
+    if ( numVertexConfidences )
+    {
+        vertexConfidence = floatArr( new float[ numVertices ] );
+    }
+    if ( numVertexIntensities )
+    {
+        vertexIntensity = floatArr( new float[ numVertices ] );
+    }
+    if ( numVertexNormals )
+    {
+        vertexNormals = floatArr( new float[ 3 * numVertices ] );
+    }
+    if ( numFaces )
+    {
+        faceIndices = uintArr( new unsigned int[ numFaces * 3 ] );
+    }
+    if ( numPoints )
+    {
+        points = floatArr( new float[ numPoints * 3 ] );
+    }
+    if ( numPointColors )
+    {
+        pointColors = ucharArr( new unsigned char[ numPoints * 3 ] );
+    }
+    if ( numPointConfidence )
+    {
+        pointConfidences = floatArr( new float[numPoints] );
+    }
+    if ( numPointIntensities )
+    {
+        pointIntensities = floatArr( new float[numPoints] );
+    }
+    if ( numPointNormals )
+    {
+        pointNormals = floatArr( new float[ 3 * numPoints ] );
+    }
+
+
+    float*        vertex            = vertices.get();
+    uint8_t* 	  vertex_color      = vertexColors.get();
+    float*        vertex_confidence = vertexConfidence.get();
+    float*        vertex_intensity  = vertexIntensity.get();
+    float*        vertex_normal     = vertexNormals.get();
+    unsigned int* face              = faceIndices.get();
+    float*        point             = points.get();
+    uint8_t*      point_color       = pointColors.get();
+    float*        point_confidence  = pointConfidences.get();
+    float*        point_intensity   = pointIntensities.get();
+    float*        point_normal      = pointNormals.get();
+
+
+    /* Set callbacks. */
+    if ( vertex )
+    {
+        ply_set_read_cb( ply, "vertex", "x", readVertexCb, &vertex, 0 );
+        ply_set_read_cb( ply, "vertex", "y", readVertexCb, &vertex, 0 );
+        ply_set_read_cb( ply, "vertex", "z", readVertexCb, &vertex, 1 );
+    }
+    if ( vertex_color )
+    {
+        ply_set_read_cb( ply, "vertex", "red",   readColorCb,  &vertex_color,  0 );
+        ply_set_read_cb( ply, "vertex", "green", readColorCb,  &vertex_color,  0 );
+        ply_set_read_cb( ply, "vertex", "blue",  readColorCb,  &vertex_color,  1 );
+    }
+    if ( vertex_confidence )
+    {
+        ply_set_read_cb( ply, "vertex", "confidence", readVertexCb, &vertex_confidence, 1 );
+    }
+    if ( vertex_intensity )
+    {
+        ply_set_read_cb( ply, "vertex", "intensity", readVertexCb, &vertex_intensity, 1 );
+    }
+    if ( vertex_normal )
+    {
+        ply_set_read_cb( ply, "vertex", "nx", readVertexCb, &vertex_normal, 0 );
+        ply_set_read_cb( ply, "vertex", "ny", readVertexCb, &vertex_normal, 0 );
+        ply_set_read_cb( ply, "vertex", "nz", readVertexCb, &vertex_normal, 1 );
+    }
+
+    if ( face )
+    {
+        ply_set_read_cb( ply, "face", "vertex_indices", readFaceCb, &face, 0 );
+        ply_set_read_cb( ply, "face", "vertex_index", readFaceCb, &face, 0 );
+    }
+
+    if ( point )
+    {
+        ply_set_read_cb( ply, "point", "x", readVertexCb, &point, 0 );
+        ply_set_read_cb( ply, "point", "y", readVertexCb, &point, 0 );
+        ply_set_read_cb( ply, "point", "z", readVertexCb, &point, 1 );
+    }
+    if ( point_color )
+    {
+        ply_set_read_cb( ply, "point", "red",   readColorCb,  &point_color,  0 );
+        ply_set_read_cb( ply, "point", "green", readColorCb,  &point_color,  0 );
+        ply_set_read_cb( ply, "point", "blue",  readColorCb,  &point_color,  1 );
+    }
+    if ( point_confidence )
+    {
+        ply_set_read_cb( ply, "point", "confidence", readVertexCb, &point_confidence, 1 );
+    }
+    if ( point_intensity )
+    {
+        ply_set_read_cb( ply, "point", "intensity", readVertexCb, &point_intensity, 1 );
+    }
+    if ( point_normal )
+    {
+        ply_set_read_cb( ply, "point", "nx", readVertexCb, &point_normal, 0 );
+        ply_set_read_cb( ply, "point", "ny", readVertexCb, &point_normal, 0 );
+        ply_set_read_cb( ply, "point", "nz", readVertexCb, &point_normal, 1 );
+    }
+
+    /* Read ply file. */
+    if ( !ply_read( ply ) )
+    {
+        std::cerr << "Could not read »" << filename << "«."
+            << std::endl;
+    }
+
+    /* Check if we got only vertices and neither points nor faces. If that is
+     * the case then use the vertices as points. */
+    //~ if ( vertices && !points && !faceIndices )
+    //~ {
+        //~ std::cout << "PLY contains neither faces nor points. "
+            //~ << "Assuming that vertices are meant to be points." << std::endl;
+        //~ points               = vertices;
+        //~ pointColors          = vertexColors;
+        //~ pointConfidences     = vertexConfidence;
+        //~ pointIntensities     = vertexIntensity;
+        //~ pointNormals         = vertexNormals;
+        //~ numPoints            = numVertices;
+        //~ numPointColors       = numVertexColors;
+        //~ numPointConfidence   = numVertexConfidences;
+        //~ numPointIntensities  = numVertexIntensities;
+        //~ numPointNormals      = numVertexNormals;
+        //~ numVertices          = 0;
+        //~ numVertexColors      = 0;
+        //~ numVertexConfidences = 0;
+        //~ numVertexIntensities = 0;
+        //~ numVertexNormals     = 0;
+        //~ vertices.reset();
+        //~ vertexColors.reset();
+        //~ vertexConfidence.reset();
+        //~ vertexIntensity.reset();
+        //~ vertexNormals.reset();
+    //~ }
+
+    ply_close( ply );
+    
+    generateHostMatrix(V,numVertices,3);
+    if(vertices)
+    {
+        for(int i=0; i<numVertices; i++){
+			
+			V.elements[V.width*0+i] = vertices[i*3+0];
+			V.elements[V.width*1+i] = vertices[i*3+1];
+			V.elements[V.width*2+i] = vertices[i*3+2];
+		}
+    }
+    
+    
+}
+
+void writePlyFile(const Matrix& V, const Matrix& Result_Normals, const char* filename){
+	
+	/* Handle options. */
+    e_ply_storage_mode mode( PLY_LITTLE_ENDIAN );
+    
+    p_ply oply = ply_create( filename, mode, NULL, 0, NULL );
+    if ( !oply )
+    {
+        std::cerr  << "Could not create »" << filename << "«" << std::endl;
+        return;
+    }
+    
+    size_t m_numVertices = V.width;
+    size_t m_numVertexNormals = Result_Normals.width;
+    
+    
+    float* m_vertices = new float[m_numVertices * 3];
+    float* m_vertexNormals = new float[m_numVertexNormals * 3];
+    
+	
+    
+    
+    for(size_t i=0; i<V.width; i++){
+		
+		m_vertices[i * 3] = V.elements[i];
+		m_vertices[i * 3 + 1] = V.elements[V.width + i];
+		m_vertices[i * 3 + 2] = V.elements[2 * V.width + i];
+		
+		m_vertexNormals[i * 3] = Result_Normals.elements[i];
+		m_vertexNormals[i * 3 + 1] = Result_Normals.elements[Result_Normals.width + i];
+		m_vertexNormals[i * 3 + 2] = Result_Normals.elements[2 * Result_Normals.width + i];
+		
+	}
+    
+    bool vertex_normal     = false;
+    bool vertex_color      = false;
+    
+    /* Add vertex element. */
+    if ( m_vertices )
+    {
+        ply_add_element( oply, "vertex", m_numVertices );
+
+        /* Add vertex properties: x, y, z, (r, g, b) */
+        ply_add_scalar_property( oply, "x", PLY_FLOAT );
+        ply_add_scalar_property( oply, "y", PLY_FLOAT );
+        ply_add_scalar_property( oply, "z", PLY_FLOAT );
+        
+        /* Add normals if there are any. */
+        if ( m_vertexNormals )
+        {
+			
+            if ( m_numVertexNormals != m_numVertices )
+            {
+                std::cout << "Amount of vertices and normals"
+                    << " does not match. Normals won't be written." << std::endl;
+            }
+            else
+            {
+                ply_add_scalar_property( oply, "nx", PLY_FLOAT );
+                ply_add_scalar_property( oply, "ny", PLY_FLOAT );
+                ply_add_scalar_property( oply, "nz", PLY_FLOAT );
+                vertex_normal = true;
+            }
+        }
+    }
+    
+    /* Write header to file. */
+    if ( !ply_write_header( oply ) )
+    {
+        std::cerr  << "Could not write header." << std::endl;
+        return;
+    }
+    
+    for (size_t i = 0; i < m_numVertices; i++ )
+    {
+        ply_write( oply, (double) m_vertices[ i * 3     ] ); /* x */
+        ply_write( oply, (double) m_vertices[ i * 3 + 1 ] ); /* y */
+        ply_write( oply, (double) m_vertices[ i * 3 + 2 ] ); /* z */
+        
+        if ( vertex_normal )
+        {
+			
+            ply_write( oply, (double) m_vertexNormals[ i * 3     ] ); /* nx */
+            ply_write( oply, (double) m_vertexNormals[ i * 3 + 1 ] ); /* ny */
+            ply_write( oply, (double) m_vertexNormals[ i * 3 + 2 ] ); /* nz */
+        }
+    }
+    
+    if ( !ply_close( oply ) )
+    {
+       std::cerr  << "Could not close file." << std::endl;
+    }
+    
+    printf("finished writing\n");
+}
 
 int main(int argc, char** argv)
 {
 	getCudaInformation(m_mps, m_cuda_cores_per_mp, m_threads_per_mp, m_threads_per_block, m_size_thread_block, m_size_grid, m_device_global_memory);
 	
-	const char * filename  = "points.ply";
+	const char * filename  = "/home/amock/datasets/polizei30M_cut.ply";
+	const char * dest_filename = "/home/amock/datasets/polizei30M_normals.ply";
 	
 	//HOST STUFF
 	int point_dim = 3;
@@ -661,16 +1126,25 @@ int main(int argc, char** argv)
 	int k=50;
 	int dim_points = 3;
 	
-	Matrix V,Result_Normals;
-	struct Matrix test;
+	Matrix V, Result_Normals;
+	//~ struct Matrix test;
 	struct Matrix indices_sorted[point_dim];
 	struct Matrix values_sorted[point_dim];
 	
-	generateHostMatrix(test, num_points, 1);
-	generateHostMatrix( V, num_points, point_dim);
+	//~ generateHostMatrix(test, num_points, 1);
+	//~ generateHostMatrix( V, num_points, point_dim);
+	
+	readPlyFile( V, filename);
+	num_points = V.width;
+	
+	
+	
 	generateHostMatrix( Result_Normals, num_points, point_dim);
-	fillMatrixWithRandomFloats( V);
+	//~ fillMatrixWithRandomFloats( V);
 	//~ fillMatrixWithRandomFloats( Result_Normals);
+	
+	
+	//~ printMatrix(V);
 	
 	
 	
@@ -685,7 +1159,9 @@ int main(int argc, char** argv)
 		
 		sortByDim( V, i, indices_sorted[i] , values_sorted[i]);
 	}
-	//~ printMatrix(V);
+	
+	
+	
 	
 	printf("Start generating kd-tree array based\n");
 	//sorted indices + values
@@ -698,7 +1174,6 @@ int main(int argc, char** argv)
 	
 	//~ printMatrix(V);
 	printf("End generating kd-tree array based\n");
-	
 	
 	//push values to device
 	//push kd_tree to device
@@ -714,12 +1189,15 @@ int main(int argc, char** argv)
 	copyToDeviceMatrix( Result_Normals, D_Result_Normals);
 	
 	
+	
+	
 	//Cuda Kernels
 	GPU_NN(D_V, D_kd_tree, D_Result_Normals, Result_Normals);
 	
 	
 	
 	//~ printMatrix(Result_Normals);
+	writePlyFile(V, Result_Normals, dest_filename);
 	
 	cudaFree(D_V.elements);
 	cudaFree(D_kd_tree.elements);
@@ -736,8 +1214,31 @@ int main(int argc, char** argv)
 	}
 	
 	free(V.elements);
-	free(test.elements);
+	//~ free(test.elements);
 	free(Result_Normals.elements);
 	printf("Free kd_tree array\n");
 	free(kd_tree.elements);
+	
+	return 0;
 }
+
+//~ int main2(int argc, char** argv)
+//~ {
+	//~ const char * filename  = "/home/amock/datasets/polizei30M_cut.ply";
+	//~ const char * dest_filename = "/home/amock/datasets/polizei30M_normals.ply";
+	
+	//~ Matrix V, Result_Normals;
+	
+	
+	//~ readPlyFile( V, filename);
+	
+	//~ generateHostMatrix( Result_Normals, V.width, V.height);
+	
+	//~ writePlyFile(V, Result_Normals, dest_filename);
+	//~ writeTestPly(dest_filename);
+	
+	//~ free(V.elements);
+	//~ free(Result_Normals.elements);
+	
+	//~ return 0;
+//~ }
