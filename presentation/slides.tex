@@ -4,6 +4,8 @@
 \usepackage[T1]{fontenc}
 \usepackage[english]{babel}
 \usepackage{lmodern}
+\usepackage{algorithm}
+\usepackage{algorithmic}
 
 \usetheme{UOS}
 
@@ -32,18 +34,63 @@
 	\frametitle{Motivation}
 \end{frame}
 
+\section{Problem Statement}
+
+\begin{frame}
+	\frametitle{Problem Statement}
+\end{frame}
+
 \section{Concepts \& Methods}
 
 \begin{frame}
-	\frametitle{Brute Force}
+	\frametitle{Parallel kNN Search}
+	\begin{columns}[T]
+		\begin{column}{0.5\textwidth}
+			\textbf{Brute Force}
+			\begin{itemize}
+				\item simply implementable
+				\item highly parallelisable
+				\item low memory requirements
+				\item quadratic runtime
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.5\textwidth}
+			\textbf{kd-Tree}
+			\begin{itemize}
+				\item hard to implement
+				\item only search part parallelisable
+				\item memory-intensive
+				\item linear runtime
+			\end{itemize}
+		\end{column}
+	\end{columns}
 \end{frame}
+
+\subsection*{Brute Force}
+
+\begin{frame}
+	\frametitle{Matrix Multiplication}
+	image of matrix multiplication
+\end{frame}
+
+\begin{frame}
+	\frametitle{Pseudocode}
+	\begin{algorithmic}
+		\FORALL{points in data}
+			\STATE calculate distances to all other points
+			\REPEAT
+				\STATE count neighbours in distance of $\varepsilon$
+				\STATE adapt $\varepsilon$
+			\UNTIL{number of neighbours in distance $\varepsilon = k$}
+			\STATE get neighbours in distance of $\varepsilon$
+		\ENDFOR
+	\end{algorithmic}
+\end{frame}
+
+\subsection*{kd-Tree}
 
 \begin{frame}
 	\frametitle{kd-Tree}
-\end{frame}
-
-\begin{frame}
-	\frametitle{Implementation}
 \end{frame}
 
 \section{Experiment Results}
