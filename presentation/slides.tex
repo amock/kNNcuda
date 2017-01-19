@@ -4,8 +4,6 @@
 \usepackage[T1]{fontenc}
 \usepackage[english]{babel}
 \usepackage{lmodern}
-\usepackage{algorithm}
-\usepackage{algorithmic}
 
 \usetheme{UOS}
 
@@ -15,7 +13,7 @@
 
 \begin{document}
 
-\title{k Nearest Neighbour Search with CUDA}
+\title{Normal Calculation in Point Clouds with CUDA}
 \author[Matthias Greshake, Alexander Mock]{Matthias Greshake, Alexander Mock\\ {\scriptsize mgreshake@uos.de, amock@uos.de}}
 \institute{Institut für Informatik\\ AG Wissensbasierte Systeme}
 \date{26. January 2016}
@@ -29,80 +27,296 @@
 \end{frame} 
 
 \section{Motivation}
+\begin{frame}{Motivation}
+  %Pointcloud und optimiertes Mesh untereinander/nebeneinander
+  %vielleicht auch hintereinander/voreinander
+\end{frame}
 
-\begin{frame}
-	\frametitle{Motivation}
+\subsection*{Point Clouds}
+\begin{frame}{Point Clouds}
+ 
+    
+  \begin{columns}
+  
+   \begin{column}{0.55\textwidth}
+   
+    \begin{figure}
+      \centering
+      
+      \includegraphics[width=1.0\linewidth]{Images/police_points.png}
+   
+    \end{figure}
+    
+    
+   \end{column}
+  \begin{column}{0.45\textwidth}
+  
+   \begin{itemize}
+    \item Depth sensors: 3D Laserscanner
+    \item High number of points 
+    \item No topological information between points
+    \item Fit a memory minimized polygonmesh
+    
+   \end{itemize}
+  \end{column}
+
+   
+  \end{columns}
+ 
+\end{frame}
+
+\subsection*{Reconstruction}
+\begin{frame}{Reconstruction}
+ 
+    
+  \begin{columns}
+  
+   \begin{column}{0.55\textwidth}
+   
+    \begin{figure}
+      \centering
+   
+      \includegraphics[width=1.0\linewidth]{Images/police_mesh.png}
+    \end{figure}
+    
+    
+   \end{column}
+  \begin{column}{0.45\textwidth}
+  
+   \begin{itemize}
+    \item Goal: No loss of information with lower memory usage
+    \item Reconstruction requires normals of each point
+    \item Precalculation of normals in pointset
+    \item Calculation of a normal requires nearest neighbors
+    
+   \end{itemize}
+  \end{column}
+
+   
+  \end{columns}
+ 
 \end{frame}
 
 \section{Problem Statement}
 
-\begin{frame}
-	\frametitle{Problem Statement}
+\subsection*{Nearest Neighbors}
+\begin{frame}{Nearest Neighbors}
+ 
+ \begin{itemize}
+  \item Undependend searches of nearest neighbors
+  \item Calculations of normals for each point based on nearest neighbors
+  \item Large runtime for nearest neighbor search on big datasets
+  \item Thread based CPU-Implementation in LVR
+  \item Idea: GPU-Implementation to reduce runtime
+ \end{itemize}
+
+ 
 \end{frame}
 
-\section{Concepts \& Methods}
-
-\begin{frame}
-	\frametitle{Parallel kNN Search}
-	\begin{columns}[T]
-		\begin{column}{0.5\textwidth}
-			\textbf{Brute Force}
-			\begin{itemize}
-				\item simply implementable
-				\item highly parallelisable
-				\item low memory requirements
-				\item quadratic runtime
-			\end{itemize}
-		\end{column}
-		\begin{column}{0.5\textwidth}
-			\textbf{kd-Tree}
-			\begin{itemize}
-				\item hard to implement
-				\item only search part parallelisable
-				\item memory-intensive
-				\item linear runtime
-			\end{itemize}
-		\end{column}
-	\end{columns}
+\subsection*{GPU - CPU}
+\begin{frame}{GPU - CPU}
+ %comparison chart
 \end{frame}
 
-\subsection*{Brute Force}
+\section{Concept and Methods}
 
-\begin{frame}
-	\frametitle{Matrix Multiplication}
-	image of matrix multiplication
+\subsection*{CUDA}
+\begin{frame}{CUDA}
+
+ \begin{columns}
+  
+   \begin{column}{0.55\textwidth}
+    
+  
+
+ \begin{itemize}
+  \item Developed by NVIDIA in 2007
+  \item Newest version 8.0
+  \item API for parallel computing on GPU
+  \item C, C++, Fortran, Python
+ \end{itemize}
+ 
+  \end{column}
+  \begin{column}{0.45\textwidth}
+   %NVIDIA CUDA bild klauen
+  \end{column}
+ \end{columns}
+
+
 \end{frame}
 
-\begin{frame}
-	\frametitle{Pseudocode}
-	\begin{algorithmic}
-		\FORALL{points in data}
-			\STATE calculate distances to all other points
-			\REPEAT
-				\STATE count neighbours in distance of $\varepsilon$
-				\STATE adapt $\varepsilon$
-			\UNTIL{number of neighbours in distance $\varepsilon = k$}
-			\STATE get neighbours in distance of $\varepsilon$
-		\ENDFOR
-	\end{algorithmic}
+\begin{frame}{CUDA - Threads}
+  \begin{figure}
+      \centering
+      
+      \includegraphics[height=0.7\textheight]{Images/grid-of-thread-blocks.png}
+   
+    \end{figure}
 \end{frame}
 
-\subsection*{kd-Tree}
+\begin{frame}{CUDA - Memory}
+   \begin{columns}
+  
+   \begin{column}{0.4\textwidth}
+   
+    \begin{figure}
+      \centering
+   
+      \includegraphics[width=1.0\linewidth]{Images/local_memory.png}
+    \end{figure}
+    
+    
+   \end{column}
+  \begin{column}{0.6\textwidth}
+  
+   \begin{figure}
+      \centering
+   
+      \includegraphics[width=1.0\linewidth]{Images/global_memory.png}
+    \end{figure}
+  \end{column}
 
-\begin{frame}
-	\frametitle{kd-Tree}
+   
+  \end{columns}
+\end{frame}
+
+\begin{frame}{CUDA - Example}
+ % Cuda code von kleinem Beispiel
+\end{frame}
+
+
+\begin{frame}{K Nearest Neighbor Search}
+  \begin{columns}[T]
+   \begin{column}{0.5\textwidth}
+    \textbf{Brute-Force}
+    \begin{itemize}
+     \item Highly parallelisable
+     \item Low memory consumption
+     \item Quadric runtime
+     \item Asynchron kNN search
+     \item Synchron for each point
+    \end{itemize}
+   \end{column}
+  \begin{column}{0.5\textwidth}
+    \textbf{Kd-tree}
+    
+    \begin{itemize}
+     \item Only partial parallelisable
+     \item Additional memory for tree representation
+     \item Approximately linear runtime for low k
+     \item Problem of recursion
+     \item Asynchron for each point
+     \item Synchron kNN search
+    \end{itemize}
+
+  \end{column}
+  \end{columns}
+\end{frame}
+
+\subsection*{Brute-Force}
+\begin{frame}{Basic Idea}
+ 
+ %PAP
+ 
+\end{frame}
+
+\begin{frame}{Pseudo-Code}
+ 
+ %pseudo code
+ 
+\end{frame}
+
+\begin{frame}{Distance Calculation}
+ % Schneeschaufel: erstes Foto auf Matzes Handy
+\end{frame}
+
+\begin{frame}{Sortierung}
+ 
+ %epsilon methode
+ %ähnlich wie: https://helloacm.com/wp-content/uploads/2016/03/2012-10-26-knn-concept.png
+ %ein vergleich auf allen daten sehr gut parallelisierbar besser als andere sortierungen
+ 
+ 
+\end{frame}
+
+\subsection*{Kd-tree}
+\begin{frame}{Kd-tree}
+ 
+\end{frame}
+
+\begin{frame}{GPU-Implementation}
+ 
+\end{frame}
+
+\begin{frame}{Array based left balanced kd-tree}
+ 
+\end{frame}
+
+\begin{frame}{GPU}
+ 
+\end{frame}
+
+\begin{frame}{Kd-tree search}
+ 
+\end{frame}
+
+\begin{frame}{Kd-tree Knn}
+ 
+\end{frame}
+
+\subsection*{Normal Calculation}
+\begin{frame}{Normal Calculation}
+ 
+\end{frame}
+
+\begin{frame}{Normal Flip}
+ 
 \end{frame}
 
 \section{Experiment Results}
+\subsection*{Results in LVR-Pipeline}
+\begin{frame}{Results in LVR-Pipeline}
+ \begin{figure}
+  \centering
+  \includegraphics[height=0.4\textheight]{Images/police_no_normals.png}\\
+  \includegraphics[height=0.4\textheight]{Images/police_normals.png}
+ \end{figure}
 
-\begin{frame}
-	\frametitle{Results}
+\end{frame}
+
+\subsection*{Runtime results}
+\begin{frame}{Runtime results}
+ 
 \end{frame}
 
 \section{Conclusion}
-
-\begin{frame}
-	\frametitle{Conclusion}
+\begin{frame}{Conclusion}
+ 
 \end{frame}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 \end{document}
