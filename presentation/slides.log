@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.16 (MiKTeX 2.9 64-bit) (preloaded format=pdflatex 2016.1.15)  19 JAN 2017 01:10
+This is pdfTeX, Version 3.14159265-2.6-1.40.16 (MiKTeX 2.9 64-bit) (preloaded format=pdflatex 2016.1.15)  21 JAN 2017 18:01
 entering extended mode
 **./slides.tex
 (slides.tex
@@ -1316,6 +1316,11 @@ Overfull \hbox (8.15446pt too wide) has occurred while \output is active
  [][]  
  []
 
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
 [2
 
 ]
@@ -1323,56 +1328,327 @@ Overfull \hbox (8.15446pt too wide) has occurred while \output is active
  [][]  
  []
 
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
 [3
 
-]
+] <images/police_point_cloud.png, id=79, 1848.9075pt x 906.38625pt>
+File: images/police_point_cloud.png Graphic file (type png)
+
+<use images/police_point_cloud.png>
+Package pdftex.def Info: images/police_point_cloud.png used on input line 50.
+(pdftex.def)             Requested size: 153.64493pt x 75.31993pt.
+
 Overfull \hbox (8.15446pt too wide) has occurred while \output is active
  [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
  []
 
 [4
 
-]
+ <./images/police_point_cloud.png>]
+<images/police_mesh.png, id=91, 1855.93375pt x 913.4125pt>
+File: images/police_mesh.png Graphic file (type png)
+
+<use images/police_mesh.png>
+Package pdftex.def Info: images/police_mesh.png used on input line 66.
+(pdftex.def)             Requested size: 153.64493pt x 75.61111pt.
+
 Overfull \hbox (8.15446pt too wide) has occurred while \output is active
  [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
  []
 
 [5
 
-]
+ <./images/police_mesh.png>]
 Overfull \hbox (8.15446pt too wide) has occurred while \output is active
  [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
  []
 
 [6
 
-]
+] <images/gpu_comparison.png, id=114, 1211.2452pt x 634.0488pt>
+File: images/gpu_comparison.png Graphic file (type png)
+
+<use images/gpu_comparison.png>
+Package pdftex.def Info: images/gpu_comparison.png used on input line 85.
+(pdftex.def)             Requested size: 307.28987pt x 160.8531pt.
+
 Overfull \hbox (8.15446pt too wide) has occurred while \output is active
  [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
  []
 
 [7
 
-]
+ <./images/gpu_comparison.png>]
+<images/cuda_logo.jpg, id=129, 232.87pt x 144.54pt>
+File: images/cuda_logo.jpg Graphic file (type jpg)
+ <use images/cuda_logo.jpg>
+Package pdftex.def Info: images/cuda_logo.jpg used on input line 105.
+(pdftex.def)             Requested size: 61.45703pt x 38.1441pt.
+
 Overfull \hbox (8.15446pt too wide) has occurred while \output is active
  [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
  []
 
 [8
 
-]
+ <./images/cuda_logo.jpg>]
+<images/cuda_threads.png, id=148, 217.5628pt x 279.29344pt>
+File: images/cuda_threads.png Graphic file (type png)
+
+<use images/cuda_threads.png>
+Package pdftex.def Info: images/cuda_threads.png used on input line 121.
+(pdftex.def)             Requested size: 124.4507pt x 159.76572pt.
+
 Overfull \hbox (8.15446pt too wide) has occurred while \output is active
  [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
  []
 
 [9
 
+ <./images/cuda_threads.png>]
+<images/cuda_memory.png, id=165, 508.14844pt x 251.43938pt>
+File: images/cuda_memory.png Graphic file (type png)
+
+<use images/cuda_memory.png>
+Package pdftex.def Info: images/cuda_memory.png used on input line 125.
+(pdftex.def)             Requested size: 307.28987pt x 152.05798pt.
+
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[10
+
+ <./images/cuda_memory.png>]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[11
+
 ]
 Overfull \hbox (8.15446pt too wide) has occurred while \output is active
  [][]  
  []
 
-[10
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[12
+
+] <images/knn_procedure.pdf, id=212, 528.47438pt x 171.64125pt>
+File: images/knn_procedure.pdf Graphic file (type pdf)
+
+<use images/knn_procedure.pdf>
+Package pdftex.def Info: images/knn_procedure.pdf used on input line 159.
+(pdftex.def)             Requested size: 307.28987pt x 99.8034pt.
+
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[13
+
+ <./images/knn_procedure.pdf>]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[14
+
+]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[15
+
+]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[16
+
+]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[17
+
+]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[18
+
+]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[19
+
+]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[20
+
+]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[21
+
+] <images/radius_search.pdf, id=360, 252.19218pt x 223.58531pt>
+File: images/radius_search.pdf Graphic file (type pdf)
+
+<use images/radius_search.pdf>
+Package pdftex.def Info: images/radius_search.pdf used on input line 242.
+(pdftex.def)             Requested size: 153.64493pt x 136.21625pt.
+
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[22
+
+ <./images/radius_search.pdf>]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[23
+
+]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[24
+
+]
+Overfull \hbox (8.15446pt too wide) has occurred while \output is active
+ [][]  
+ []
+
+
+Overfull \hbox (2.55069pt too wide) has occurred while \output is active
+ [][][][]  
+ []
+
+[25
 
 ]
 \tf@nav=\write6
@@ -1384,33 +1660,36 @@ Overfull \hbox (8.15446pt too wide) has occurred while \output is active
 \tf@snm=\write8
 \openout8 = `slides.snm'.
 
-Package atveryend Info: Empty hook `BeforeClearDocument' on input line 108.
-Package atveryend Info: Empty hook `AfterLastShipout' on input line 108.
+Package atveryend Info: Empty hook `BeforeClearDocument' on input line 262.
+Package atveryend Info: Empty hook `AfterLastShipout' on input line 262.
  (slides.aux)
-Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 108.
-Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 108.
+Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 262.
+Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 262.
 Package rerunfilecheck Info: File `slides.out' has not changed.
 (rerunfilecheck)             Checksum: 14DE528A3FFF1874E34F118CFAFA7EC2;256.
-Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 108.
+Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 262.
  ) 
 Here is how much of TeX's memory you used:
- 20685 strings out of 493634
- 399508 string characters out of 3145355
- 693714 words of memory out of 3000000
- 23531 multiletter control sequences out of 15000+200000
- 49966 words of font info for 45 fonts, out of 3000000 for 9000
+ 20816 strings out of 493634
+ 401902 string characters out of 3145355
+ 697254 words of memory out of 3000000
+ 23619 multiletter control sequences out of 15000+200000
+ 52734 words of font info for 46 fonts, out of 3000000 for 9000
  1025 hyphenation exceptions out of 8191
- 69i,19n,75p,389b,640s stack positions out of 5000i,500n,10000p,200000b,50000s
-{D:/Programme/MiKTeX 2.9/fonts/enc/dvips/lm/lm-ec.enc}{D:/Programme/MiKTeX 2.
-9/fonts/enc/dvips/lm/lm-rm.enc}{D:/Programme/MiKTeX 2.9/fonts/enc/dvips/lm/lm-m
-athit.enc}<D:/Programme/MiKTeX 2.9/fonts/type1/public/lm/lmmi10.pfb><D:/Program
-me/MiKTeX 2.9/fonts/type1/public/lm/lmss10.pfb><D:/Programme/MiKTeX 2.9/fonts/t
-ype1/public/lm/lmss12.pfb><D:/Programme/MiKTeX 2.9/fonts/type1/public/lm/lmss8.
-pfb><D:/Programme/MiKTeX 2.9/fonts/type1/public/lm/lmssbx10.pfb><D:/Programme/M
-iKTeX 2.9/fonts/type1/public/lm/lmsso10.pfb>
-Output written on slides.pdf (10 pages, 284899 bytes).
+ 69i,19n,75p,389b,663s stack positions out of 5000i,500n,10000p,200000b,50000s
+{D:/Programme/MiKTeX 2.9/fonts/enc/dvips/lm/lm-mathex.enc}{D:/Programme/MiKTe
+X 2.9/fonts/enc/dvips/lm/lm-ec.enc}{D:/Programme/MiKTeX 2.9/fonts/enc/dvips/lm/
+lm-rm.enc}{D:/Programme/MiKTeX 2.9/fonts/enc/dvips/lm/lm-mathit.enc}{D:/Program
+me/MiKTeX 2.9/fonts/enc/dvips/lm/lm-mathsy.enc}<D:/Programme/MiKTeX 2.9/fonts/t
+ype1/public/lm/lmex10.pfb><D:/Programme/MiKTeX 2.9/fonts/type1/public/lm/lmmi10
+.pfb><D:/Programme/MiKTeX 2.9/fonts/type1/public/lm/lmss10.pfb><D:/Programme/Mi
+KTeX 2.9/fonts/type1/public/lm/lmss12.pfb><D:/Programme/MiKTeX 2.9/fonts/type1/
+public/lm/lmss8.pfb><D:/Programme/MiKTeX 2.9/fonts/type1/public/lm/lmssbx10.pfb
+><D:/Programme/MiKTeX 2.9/fonts/type1/public/lm/lmsso10.pfb><D:/Programme/MiKTe
+X 2.9/fonts/type1/public/lm/lmsy10.pfb>
+Output written on slides.pdf (25 pages, 2817706 bytes).
 PDF statistics:
- 198 PDF objects out of 1000 (max. 8388607)
- 28 named destinations out of 1000 (max. 500000)
- 83 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 476 PDF objects out of 1000 (max. 8388607)
+ 60 named destinations out of 1000 (max. 500000)
+ 123 words of extra memory for PDF output out of 10000 (max. 10000000)
 
