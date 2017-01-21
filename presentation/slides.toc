@@ -1,7 +1,5 @@
 \beamer@endinputifotherversion {3.36pt}
 \select@language {english}
-\beamer@sectionintoc {1}{Motivation}{3}{0}{1}
-\beamer@sectionintoc {2}{Problem Statement}{6}{0}{2}
-\beamer@sectionintoc {3}{Concepts \& Methods}{8}{0}{3}
-\beamer@sectionintoc {4}{Experiment Results}{24}{0}{4}
-\beamer@sectionintoc {5}{Conclusion}{25}{0}{5}
+\beamer@sectionintoc {1}{Problem Statement}{6}{0}{1}
+\beamer@sectionintoc {2}{Experiment Results}{31}{0}{2}
+\beamer@sectionintoc {3}{Conclusion}{33}{0}{3}
