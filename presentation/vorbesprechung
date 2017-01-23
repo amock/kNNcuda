@@ -1,0 +1,32 @@
+Pointsets:
+
+Pointset -> Pointcloud
+
+2D weg
+amount -> number
+Poor runtime of algorithms
+
+Probleme:
+keine Topoligie
+Rendering faster on Polygonmeshes
+bild größer
+
+Reconstruction:
+needs normals of each point
+
+hervorheben: bottleneck nearest neighbor search
+
+zuerst CUDA dann kNN-search
+
+erst beide ansätze vorstellen, dann näher eingehen
+
+room -> space
+
+kd-Tree in schön
+
+Results - LVR: Vergleich mit LVR
+
+Settings:
+Take not random points. eleminate random police pointcloud points
+two pointclouds: polizei haseschacht
+
