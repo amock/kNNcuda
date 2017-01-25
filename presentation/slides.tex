@@ -310,15 +310,12 @@
 \begin{frame}{Split Rule}
 	\begin{algorithmic}
 		
-		\STATE calculate $ 2^{x} = N-1 $ 
-		\STATE $pot \gets \lfloor x \rfloor $
-		\STATE $right \gets 2^{pot-1} $
-		\STATE $left \gets (N - r)$
-		\STATE $v \gets 2^{pot} $
+		\STATE $v \gets 2^{\log_2(N-1) }$ 
+		\STATE $left \gets N - \frac{v}{2}$
 		\IF { $ left > v $ }
-			\STATE $ right \gets right + left - v $
 			\STATE $ left \gets v $
 		\ENDIF
+		\STATE $ right \gets N - left $
 		
 	\end{algorithmic}
 \end{frame}
@@ -361,36 +358,6 @@
 \begin{frame}{kd-Tree KNN}
 	\centering
 	\includegraphics[height=0.7\textheight]{knn.png}
-\end{frame}
-
-\begin{frame}{kd-Tree KNN}
-	\small
-	\begin{algorithmic}
-		\STATE define nn as a set of nearest neighbors
-		\STATE initialize radius with 0
-		\WHILE { size of nn < k }
-			\STATE add parents other subtree leafs to nn
-			\STATE update radius to the max found distance
-			\STATE go up
-		\ENDWHILE
-		
-	\end{algorithmic}
-\end{frame}
-
-\begin{frame}{kd-Tree KNN}
-	\small
-	\begin{algorithmic}
-		\WHILE{ distance of query point three upper tree nodes < radius }
-			\STATE go up
-			\STATE check neighbor cell for shorter distances
-			\FOR {points with shorter distances}
-				 \STATE update nn
-				 \STATE update radius
-			\ENDFOR
-		\ENDWHILE
-	 
-	\end{algorithmic}
-
 \end{frame}
 
 \begin{frame}{kd-Tree KNN}
