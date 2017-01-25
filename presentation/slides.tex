@@ -6,8 +6,8 @@
 \usepackage{lmodern}
 \usepackage{algorithm}
 \usepackage{algorithmic}
-\usepackage{mathtools}
 \usepackage{hyperref}
+\usepackage{mathtools}
 \usepackage{multimedia}
 
 \usetheme{UOS}
@@ -35,7 +35,7 @@
 
 \begin{frame}{Motivation}
 	\centering
-	\movie[width=11cm,height=6.1875cm,poster,autostart,loop]{}{Videos/kirche.mov}
+	\movie[width=11cm,height=6.1875cm,poster,autostart,loop]{}{videos/kirche.mov}
 \end{frame}
 
 \begin{frame}{Point Clouds}
@@ -81,7 +81,7 @@
 		\item Independent search of k nearest neighbors to each point
 		\item Long runtimes on large datasets
 		\begin{block}{}
-			\centering Nearest neighbor search is the bottleneck of normal calculation
+			\centering Nearest neighbor search is the bottleneck of the reconstruction
 		\end{block}
 		\item Thread-based CPU implementation in the LVR Framework
 	\end{itemize}
@@ -146,7 +146,7 @@
 				\item Highly parallelisable
 				\item Low memory usage
 				\item Quadratic runtime: $\mathcal{O}(n^2)$
-				\item Asynchronous
+				\item Asynchronous search
 			\end{itemize}
 		\end{column}
 		\begin{column}{0.5\textwidth}
@@ -155,7 +155,7 @@
 				\item Only partial parallelisable
 				\item Additional memory for tree representation necessary
 				\item Approximately linear runtime: \mbox{$\mathcal{O}(n \cdot k \cdot \log(n))$}
-				\item Synchronous
+				\item Synchronous search
 			\end{itemize}
 		\end{column}
 	\end{columns}
@@ -309,18 +309,14 @@
 
 \begin{frame}{Split Rule}
 	\begin{algorithmic}
-		
 		\STATE $v \gets 2^{\log_2(N-1) }$ 
 		\STATE $left \gets N - \frac{v}{2}$
 		\IF { $ left > v $ }
 			\STATE $ left \gets v $
 		\ENDIF
 		\STATE $ right \gets N - left $
-		
 	\end{algorithmic}
 \end{frame}
-
-
 
 \begin{frame}{GPU}
 	\begin{itemize}
@@ -464,7 +460,7 @@
 	\end{figure}
 \end{frame}
 
-\begin{frame}{Normals}
+\begin{frame}{Optimization}
 	\begin{figure}
    		\centering
    		\includegraphics[height=0.39\textheight]{police_mesh.png}\\
@@ -473,12 +469,20 @@
   	\end{figure}
 \end{frame}
 
-\begin{frame}{Discussion}
-\end{frame}
-
 \section{Conclusion}
 
 \begin{frame}{Conclusion}
+	\begin{itemize}
+		\item Normals calculation to transform point cloud to polygon mesh
+		\item Nearest neighbor search is bottleneck of the reconstruction
+		\item Parallelization on GPU to reduce runtime
+		\item Results
+		\begin{itemize}
+			\item Naive search is not appropriated on large datasets
+			\item GPU kd-Tree is five times faster than CPU implementation
+		\end{itemize}
+		\item Outlook: normal calculation with PCA
+	\end{itemize}
 \end{frame}
 
 \end{document}
