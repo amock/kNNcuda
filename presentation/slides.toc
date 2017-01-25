@@ -1,5 +1,0 @@
-\beamer@endinputifotherversion {3.36pt}
-\select@language {english}
-\beamer@sectionintoc {1}{Problem Statement}{6}{0}{1}
-\beamer@sectionintoc {2}{Experiment Results}{31}{0}{2}
-\beamer@sectionintoc {3}{Conclusion}{33}{0}{3}
