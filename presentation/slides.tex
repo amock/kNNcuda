@@ -6,8 +6,8 @@
 \usepackage{lmodern}
 \usepackage{algorithm}
 \usepackage{algorithmic}
-\usepackage{mathtools}
 \usepackage{hyperref}
+\usepackage{mathtools}
 \usepackage{multimedia}
 
 \usetheme{UOS}
@@ -35,7 +35,7 @@
 
 \begin{frame}{Motivation}
 	\centering
-	\movie[width=11cm,height=6.1875cm,poster,autostart,loop]{}{Videos/kirche.mov}
+	\movie[width=11cm,height=6.1875cm,poster,autostart,loop]{}{videos/kirche.mov}
 \end{frame}
 
 \begin{frame}{Point Clouds}
@@ -81,7 +81,7 @@
 		\item Independent search of k nearest neighbors to each point
 		\item Long runtimes on large datasets
 		\begin{block}{}
-			\centering Nearest neighbor search is the bottleneck of normal calculation
+			\centering Nearest neighbor search is the bottleneck of the reconstruction
 		\end{block}
 		\item Thread-based CPU implementation in the LVR Framework
 	\end{itemize}
@@ -309,7 +309,6 @@
 
 \begin{frame}{Split Rule}
 	\begin{algorithmic}
-		
 		\STATE calculate $ 2^{x} = N-1 $ 
 		\STATE $pot \gets \lfloor x \rfloor $
 		\STATE $right \gets 2^{pot-1} $
@@ -319,11 +318,8 @@
 			\STATE $ right \gets right + left - v $
 			\STATE $ left \gets v $
 		\ENDIF
-		
 	\end{algorithmic}
 \end{frame}
-
-
 
 \begin{frame}{GPU}
 	\begin{itemize}
@@ -372,8 +368,7 @@
 			\STATE add parents other subtree leafs to nn
 			\STATE update radius to the max found distance
 			\STATE go up
-		\ENDWHILE
-		
+		\ENDWHILE	
 	\end{algorithmic}
 \end{frame}
 
@@ -388,7 +383,6 @@
 				 \STATE update radius
 			\ENDFOR
 		\ENDWHILE
-	 
 	\end{algorithmic}
 
 \end{frame}
@@ -510,7 +504,15 @@
 
 \begin{frame}{Conclusion}
 	\begin{itemize}
-		\item
+		\item Normals calculation to transform point cloud to polygon mesh
+		\item Nearest neighbor search is bottleneck of the reconstruction
+		\item Parallelization on GPU to reduce runtime
+		\item Results
+		\begin{itemize}
+			\item Naive search is not appropriated on large datasets
+			\item GPU kd-Tree is five times faster than CPU implementation
+		\end{itemize}
+		\item Outlook: normal calculation with PCA
 	\end{itemize}
 \end{frame}
 
