@@ -134,6 +134,9 @@
 \end{frame}
 
 \begin{frame}{Example}
+	\vspace*{\fill}
+	\centering \large Short CUDA Demo
+	\vspace*{\fill}
 \end{frame}
 
 \subsection*{k Nearest Neighbors}
@@ -165,7 +168,7 @@
 
 \begin{frame}{Basic Idea}
 	\centering
-	\includegraphics[width=0.9\textwidth]{knn_procedure.pdf}
+	\includegraphics[width=1.0\textwidth]{knn_procedure.pdf}
 \end{frame}
 
 \begin{frame}{Implementation}
@@ -255,7 +258,7 @@
 
 \begin{frame}{Basic Idea}
 	\centering
-	\includegraphics[width=0.9\textwidth]{kdtree_procedure.pdf}
+	\includegraphics[width=1.0\textwidth]{kdtree_procedure.pdf}
 \end{frame}
 
 \begin{frame}{Tree Construction}
@@ -309,26 +312,26 @@
 
 \begin{frame}{Split Rule}
 	\begin{algorithmic}
-		\STATE $v \gets 2^{\log_2(N-1) }$ 
-		\STATE $left \gets N - \frac{v}{2}$
-		\IF { $ left > v $ }
-			\STATE $ left \gets v $
+		\STATE $v \gets 2^{\log_2(n-1)}$ 
+		\STATE $left \gets n - \frac{v}{2}$
+		\IF {$left > v$}
+			\STATE $left \gets v$
 		\ENDIF
-		\STATE $ right \gets N - left $
+		\STATE $right \gets n - left$
 	\end{algorithmic}
 \end{frame}
 
-\begin{frame}{GPU}
+\begin{frame}{GPU Initialization}
 	\begin{itemize}
 		\item Allocate memory on device for 
 		\begin{itemize}
-			\item Point cloud: $ N*3 $
-			\item kd-Tree: $ (2N-1) $
-			\item Normals:$ N*3 $
-			\item Total: $ N*8 - 1 $
+			\item Point cloud: $3 \cdot n$
+			\item kd-Tree: $2n - 1$
+			\item Normals: $3 \cdot n$
+			\item Total: $8 \cdot n - 1$
 		\end{itemize}
-		\item Copy point cloud, kd-Tree to device
-		\item Start GPU-Kernel
+		\item Copy point cloud and kd-tree to device
+		\item Start GPU kernel
 		\begin{itemize}
 			\item Get maximum number of threads
 			\item Calculate number of blocks
@@ -338,34 +341,30 @@
 
 \begin{frame}{kd-Tree Search}
 	\begin{algorithmic}
-		\STATE $ q \gets Querypoint , dim \gets 0, pos \gets root$
-		\WHILE { $ pos \cdot 2 + 1 < kdtree.size $ }
-			\STATE $ s \gets kdtree.split $
-			\IF{ $ q[dim] < s $ }
-				\STATE $ pos \gets pos \cdot 2 + 1 $
+		\STATE $q \gets \text{query point}, dim \gets 0, pos \gets \text{root}$
+		\WHILE {$pos \cdot 2 + 1 < \text{kdtree.size}$}
+			\STATE $s \gets \text{kdtree.split}$
+			\IF {$q[dim] < s$}
+				\STATE $pos \gets pos \cdot 2 + 1$
 			\ELSE
-				\STATE $ pos \gets pos \cdot 2 + 2 $
+				\STATE $pos \gets pos \cdot 2 + 2$
 			\ENDIF
-			\STATE $ dim \gets (dim+1)\%3 $
+			\STATE $dim \gets (dim + 1) \mod 3$
 		\ENDWHILE
 	\end{algorithmic}
 \end{frame}
 
-\begin{frame}{kd-Tree KNN}
+\begin{frame}{KNN Search}
 	\centering
-	\includegraphics[height=0.7\textheight]{knn.png}
+	\includegraphics[width=0.6\textwidth]{knn.pdf}
 \end{frame}
 
-\begin{frame}{kd-Tree KNN}
-\centering
-	\only<1>{
-		k=2  \\
-		\includegraphics[height=0.7\textheight]{knn1.png}
-	}
-	\only<2>{
-		k=2 \\
-		\includegraphics[height=0.7\textheight]{knn2.png}
-	}
+\begin{frame}{KNN Search}
+	\centering
+	$k = 2$ \\
+	\bigskip
+	\only<1>{\includegraphics[width=0.45\textwidth]{knn1.png}}
+	\only<2>{\includegraphics[width=0.45\textwidth]{knn2.png}}
 \end{frame}
 
 \subsection*{Normal Calculation}
@@ -446,7 +445,7 @@
 \end{frame}
 
 \begin{frame}{GPU kd-Tree vs. CPU kd-Tree LVR}
-	\includegraphics[width=1.0\textwidth]{cpu_gpu_results.png}
+	\includegraphics[width=1.0\textwidth]{plot_2.pdf}
 \end{frame}
 
 \subsection*{LVR Pipeline}
@@ -460,7 +459,7 @@
 	\end{figure}
 \end{frame}
 
-\begin{frame}{Optimization}
+\begin{frame}{Triangles}
 	\begin{figure}
    		\centering
    		\includegraphics[height=0.39\textheight]{police_mesh.png}\\
@@ -473,13 +472,13 @@
 
 \begin{frame}{Conclusion}
 	\begin{itemize}
-		\item Normals calculation to transform point cloud to polygon mesh
-		\item Nearest neighbor search is bottleneck of the reconstruction
+		\item Calculate normals to transform point cloud to polygon mesh
+		\item Nearest neighbor search is the bottleneck of the reconstruction
 		\item Parallelization on GPU to reduce runtime
-		\item Results
+		\item Results:
 		\begin{itemize}
 			\item Naive search is not appropriated on large datasets
-			\item GPU kd-Tree is five times faster than CPU implementation
+			\item CUDA kd-Tree is three times faster than CPU implementation
 		\end{itemize}
 		\item Outlook: normal calculation with PCA
 	\end{itemize}
