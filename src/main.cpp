@@ -1,11 +1,11 @@
 /**
- * main.cu
+ * main.cpp
  *
  * @author Alexander Mock
  * @author Matthias Greshake
  */
 
-#include "../include/kNN.h"
+#include "../include/calcNormals.h"
 
 int m_mps, m_cuda_cores_per_mp, m_threads_per_mp, m_threads_per_block;
 int* m_size_block = new int(3);
@@ -32,6 +32,9 @@ void getDeviceInformation(int &mps, int &cuda_cores_per_mp, int &threads_per_mp,
 }
 
 int main(int argc, char** argv) {
+        const char* file;
+        const char* dest = "normals.ply";
+
 	getDeviceInformation(m_mps, m_cuda_cores_per_mp, m_threads_per_mp, m_threads_per_block, m_size_block, m_size_grid, m_device_global_memory);
 
 	for (int i = 0; i < argc; i++) {
@@ -46,14 +49,17 @@ int main(int argc, char** argv) {
 			cout << "Device Global Memory: " << m_device_global_memory << endl;
 			cout << endl;
 		}
+                if (strcmp(argv[i], "--file") == 0) {
+                        file = argv[i+1];
+                }
 	}
 
-	int seed = 12345;
+        int seed = 12345;
 	srand(seed);
 
-	int k = 50;
+        int k = 50;
         int numPoints = 100000;
-        kNearestNeighborSearch(k, numPoints);
+        kNearestNeighborSearch(k, numPoints, file, dest);
 
         cout << endl << "Terminated" << endl;
 }
