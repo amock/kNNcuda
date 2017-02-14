@@ -1,3 +1,5 @@
+<h1>Softwarename: cudaNormals</h1>
+<br>
 <h1> k - Nearest Neighbor Search on Pointclouds for normal estimation with CUDA. </h1>
 
 <h3>Requirements:</h3>
