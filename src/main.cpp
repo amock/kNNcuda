@@ -1,3 +1,10 @@
+/**
+ * calcNormalsCuda.h
+ *
+ * @author Alexander Mock
+ * @author Matthias Greshake
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
@@ -477,29 +484,19 @@ void writePlyFile(float* V, size_t m_numVertices, float* Result_Normals, size_t 
 
 int main(int argc, char** argv){
 	
-	const char* in_file = "/home/amock/datasets/polizei/raw/polizei30M_cut.ply";
-	const char* out_file = "polizei30M_cut_normals.ply";
+	const char* in_file = "/path/to/input_mesh.ply";
+	const char* out_file = "/path/to/output_mesh.ply";
 	
-	size_t point_size = 5000;
+	size_t point_size;
 	int point_dim = 3;
 	
 	PointArray points;
 	PointArray normals;
 	normals.dim = 3;
 	
-	
-	//~ points.elements = (float*)malloc(point_size * 3 * sizeof(float));
-	//~ for(int i=0; i< point_size*3; i++){
-		//~ points.elements[i]=i;
-	//~ }
 	readPlyFile(points, point_size, in_file, 1.0);
 	points.width = point_size;
 	points.dim = 3;
-	
-	//~ printf("main first point: %f %f %f\n", points.elements[0], points.elements[1], points.elements[2]);
-	//~ printf("%d\n", point_size);
-	
-	
 	
 	CalcNormalsCuda calculator(points);
 	
@@ -510,8 +507,6 @@ int main(int argc, char** argv){
 	calculator.start();
 	
 	calculator.getNormals(normals);
-	
-	//~ printf("first normal %f %f %f \n", normals.elements[0], normals.elements[1], normals.elements[2]);
 	
 	writePlyFile(points.elements, point_size, normals.elements, point_size, out_file);
 	
