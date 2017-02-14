@@ -12,6 +12,9 @@
 This Toolkit includes a class for normal calculation on big pointclouds. It was researched during the "Parallel computing"-course of the University Osnabrück (Lecturer: Juan Carlos Saborio Morales). The software generates a left-balanced array-based kd-tree on a pointcloud. The k-nearest neighbor search and the normal calculation is computed highly parallel on the GPU with the CUDA-Toolkit. 
 </p>
 
+<h3>Workflow</h3>
+
+
 <br>
 <h2>Normal Calculation with CUDA:</h2>
 
