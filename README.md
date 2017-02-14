@@ -13,6 +13,7 @@ This Toolkit includes a class for normal calculation on big pointclouds. It was 
 </p>
 
 <h3>Workflow</h3>
+![alt tag](https://github.com/aock/kNNcuda/blob/master/res/workflow_normals_cuda.png)
 
 
 <br>
