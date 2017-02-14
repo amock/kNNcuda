@@ -66,11 +66,15 @@ set(NORMALS_CUDA_SRCS
 
 #add library to link by calcNormalsCuda.h usage
 cuda_add_library(normalsCuda ${NORMALS_CUDA_SRCS})
+target_link_libraries(normalsCuda
+	${CUDA_LIBRARIES}
+	${CUDA_CUDA_LIBRARY}
+)
 
-cuda_add_executable(cudaNormals src/main.cpp include/rply/rply.c)
+
+###### ADD YOUR CODE HERE #######
+add_executable(cudaNormals src/main.cpp include/rply/rply.c)
 
 target_link_libraries(cudaNormals
 	normalsCuda
-	${CUDA_LIBRARIES}
-	${CUDA_CUDA_LIBRARY}
 )
