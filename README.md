@@ -4,6 +4,7 @@
 <ul>
 <li> CUDA (Minimum 8.0) (https://developer.nvidia.com/cuda-toolkit) </li>
 <li> CMake (Minimum 2.8.8) </li>
+<li> Boost Library for the example main.cpp </li>
 </ul>
 
 <h3>Abstract</h3>
@@ -47,13 +48,18 @@ This Toolkit includes a class for normal calculation on big pointclouds. It was 
 - getNormals(PointArray& normals): mallocs and fills the resulting normal array.
 
 
-<p>Extra:</p>
+<p>Struct PointArray:</p>
 <pre><code>struct PointArray { <br>
         int width; <br>
         int dim; <br>
         float* elements; <br>
     };
 </code></pre>
+
+<h3>Example Code (src/main.cpp)</h3>
+<p>Reading a File with the Stanford Triangle Format (.ply) to a PointArray</p>
+<p>Executing the CUDA normal calculation</p>
+<p>Writing PointArray of points and PointArray of normals to destination file</p>
 
 
 
