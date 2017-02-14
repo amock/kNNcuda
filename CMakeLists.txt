@@ -1,12 +1,7 @@
 cmake_minimum_required(VERSION 2.8.8)
 
 
-project(kdtreeCuda C CXX)
-
-# ---[ utility
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/Modules/")
-include(cmake/Utils.cmake)
-include(cmake/Targets.cmake)
+project(cudaNormals C CXX)
 
 # -- [ this option causes problems for some reason, so turn it off before searching for CUDA
 if(MSVC)
@@ -52,29 +47,22 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} "--ftz=true;--prec-div=false;--prec-sqrt=
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} "-arch=sm_50")
 
 
-
-#if(UNIX OR APPLE)
-#  list(APPEND CUDA_NVCC_FLAGS "-Xcompiler;-fPIC;")
-#endif()
-
-warnings_disable(CMAKE_CXX_FLAGS /wd4985)
-
-
 set(NORMALS_CUDA_SRCS
 	src/calcNormalsCuda.cu
 )
 
 #add library to link by calcNormalsCuda.h usage
-cuda_add_library(normalsCuda ${NORMALS_CUDA_SRCS})
-target_link_libraries(normalsCuda
+cuda_add_library(cudaNormals ${NORMALS_CUDA_SRCS})
+
+target_link_libraries(cudaNormals
 	${CUDA_LIBRARIES}
 	${CUDA_CUDA_LIBRARY}
 )
 
 
 ###### ADD YOUR CODE HERE #######
-add_executable(cudaNormals src/main.cpp include/rply/rply.c)
+add_executable(Example src/main.cpp include/rply/rply.c)
 
-target_link_libraries(cudaNormals
-	normalsCuda
+target_link_libraries(Example
+	cudaNormals
 )
