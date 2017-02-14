@@ -1,3 +1,10 @@
+/**
+ * calcNormalsCuda.h
+ *
+ * @author Alexander Mock
+ * @author Matthias Greshake
+ */
+
 #include "../include/calcNormalsCuda.h"
 
 /// Define Kernels
