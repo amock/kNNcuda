@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
+#include <cstring>
 #include "../include/calcNormalsCuda.h"
 #include "../include/rply/rply.h"
-#include "../include/helper_cuda.h"
 
 
 int readVertexCb( p_ply_argument argument )
