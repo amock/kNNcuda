@@ -60,10 +60,17 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} "-arch=sm_50")
 warnings_disable(CMAKE_CXX_FLAGS /wd4985)
 
 
+set(NORMALS_CUDA_SRCS
+	src/calcNormalsCuda.cu
+)
 
-cuda_add_executable(Main src/main.cpp src/calcNormals.cu include/rply/rply.c)
+#add library to link by calcNormalsCuda.h usage
+cuda_add_library(normalsCuda ${NORMALS_CUDA_SRCS})
 
-target_link_libraries(Main
+cuda_add_executable(cudaNormals src/main.cpp include/rply/rply.c)
+
+target_link_libraries(cudaNormals
+	normalsCuda
 	${CUDA_LIBRARIES}
 	${CUDA_CUDA_LIBRARY}
 )
