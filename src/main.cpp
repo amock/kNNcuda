@@ -26,8 +26,16 @@
 #include <stdlib.h>
 #include <iostream>
 #include <cstring>
-#include "../include/calcNormalsCuda.h"
-#include "../include/rply/rply.h"
+#include "calcNormalsCuda.h"
+#include "rply/rply.h"
+
+typedef boost::shared_array<unsigned int> uintArr;
+
+
+typedef boost::shared_array<float> floatArr;
+
+
+typedef boost::shared_array<unsigned char> ucharArr;
 
 
 int readVertexCb( p_ply_argument argument )
@@ -91,7 +99,6 @@ void readPlyFile(PointArray& V, size_t& num_points, const char* filename ,float 
        std::cerr  << "Could not read header." << std::endl;
         return;
     }
-    std::cout  << "Loading »" << filename << "«." << std::endl;
 
     /* Check if there are vertices and get the amount of vertices. */
     char buf[256] = "";
@@ -407,8 +414,7 @@ void readPlyFile(PointArray& V, size_t& num_points, const char* filename ,float 
 		}
 	}
     
-    
-    printf("finished reading file: %d\n",(int)numVertices);
+
     
 }
 
@@ -495,14 +501,13 @@ void writePlyFile(float* V, size_t m_numVertices, float* Result_Normals, size_t 
     {
        std::cerr  << "Could not close file." << std::endl;
     }
-    
-    printf("finished writing points: %d\n", (int)m_numVertices);
+
 }
 
 int main(int argc, char** argv){
 	
-	const char* in_file = "/path/to/input_mesh.ply";
-	const char* out_file = "/path/to/output_mesh.ply";
+    const char* in_file = "/home/amock/datasets/polizei/raw/polizei30M_cut.ply";
+    const char* out_file = "output_mesh.ply";
 	
 	size_t point_size;
 	int point_dim = 3;
@@ -511,22 +516,31 @@ int main(int argc, char** argv){
 	PointArray normals;
 	normals.dim = 3;
 	
+    std::cout << "Reading file " << in_file << " ..." << std::endl;
 	readPlyFile(points, point_size, in_file, 1.0);
+    std::cout << "Finished reading file. " << point_size << std::endl;
+
 	points.width = point_size;
 	points.dim = 3;
 	
+    std::cout << "Constructing kd-tree..." << std::endl;
 	CalcNormalsCuda calculator(points);
+    std::cout << "Finished kd-tree construction." << std::endl;
 	
 	calculator.setK(50);
 	calculator.setFlippoint(100000.0, 100000.0, 100000.0);
 	calculator.setMethod("PCA");
 	
+    std::cout << "Start Normal Calculation..." << std::endl;
 	calculator.start();
+    std::cout << "Finished Normal Calculation." << std::endl;
 	
 	calculator.getNormals(normals);
 	
+    std::cout << "Writing normals.." << std::endl;
 	writePlyFile(points.elements, point_size, normals.elements, point_size, out_file);
-	
+    std::cout << "Finished writing." << std::endl;
+
 	free(points.elements);
 	return 1;
 }

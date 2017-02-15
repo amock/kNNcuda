@@ -32,15 +32,23 @@
 #include <math.h>
 #include <float.h>
 #include <stdint.h>
-#include "boost/shared_array.hpp"
 
-typedef boost::shared_array<unsigned int> uintArr;
+#include <cuda_runtime.h>
+#include <driver_types.h>
+
+#include <boost/shared_array.hpp>
 
 
-typedef boost::shared_array<float> floatArr;
-
-
-typedef boost::shared_array<unsigned char> ucharArr;
+static void HandleError( cudaError_t err,
+                         const char *file,
+                         int line ) {
+    if (err != cudaSuccess) {
+        printf( "%s in %s at line %d\n", cudaGetErrorString( err ),
+                file, line );
+        exit( EXIT_FAILURE );
+    }
+}
+#define HANDLE_ERROR( err ) (HandleError( err, __FILE__, __LINE__ ))
 
 
 struct PointArray {
