@@ -103,7 +103,7 @@ __device__ float SearchQueryPoint(const PointArray& D_kd_tree, float x, float y,
 }
 
 
-__device__ void calculateNormalRansa2(float* nn_vecs, int k, int max_iterations, float& x, float& y, float& z, bool debug=false){
+__device__ void calculateNormalRansa2(float* nn_vecs, int k, int max_iterations, float& x, float& y, float& z){
 	float min_dist = FLT_MAX;
 	int iterations = 0;
 	
@@ -154,7 +154,7 @@ __device__ void calculateNormalRansa2(float* nn_vecs, int k, int max_iterations,
 	}
 }
 
-__device__ void calculateNormalRansa(float* nn_vecs, int k, int max_iterations, float& x, float& y, float& z, bool debug=false){
+__device__ void calculateNormalRansa(float* nn_vecs, int k, int max_iterations, float& x, float& y, float& z){
 	
 	float * last_vec = (float*)malloc(3 * sizeof(float) );
 	last_vec[0] = nn_vecs[0];
@@ -171,16 +171,10 @@ __device__ void calculateNormalRansa(float* nn_vecs, int k, int max_iterations, 
 	for(int i=3; i<k*3; i+=3){
 		// cross product
 		
-		
-		
-		//~ printf("%f %f %f\n", last_vec[0], last_vec[1], last_vec[2]);
 		float n_x = last_vec[1]*nn_vecs[i+2] - last_vec[2]*nn_vecs[i+1];
 		float n_y = last_vec[2]*nn_vecs[i+0] - last_vec[0]*nn_vecs[i+2];
 		float n_z = last_vec[0]*nn_vecs[i+1] - last_vec[1]*nn_vecs[i+0];
-		
-		
-		
-		
+
 		float norm = sqrtf( n_x*n_x + n_y*n_y + n_z*n_z );
 		
 		if( norm == 0.0){
@@ -190,13 +184,7 @@ __device__ void calculateNormalRansa(float* nn_vecs, int k, int max_iterations, 
 			last_vec[2] = nn_vecs[i+2];
 			continue;
 			
-		}
-		if(debug){
-			printf("%d: %f %f %f\n",i,n_x, n_y, n_z);
-		}
-		
-		
-		
+        }
 		
 		float norm_inv = 1.0/norm;
 		//~ float norm = n_x*n_x + n_y*n_y + n_z*n_z ;
@@ -225,7 +213,7 @@ __device__ void calculateNormalRansa(float* nn_vecs, int k, int max_iterations, 
 		last_vec[1] = nn_vecs[i+1];
 		last_vec[2] = nn_vecs[i+2];
 		
-		if(iterations > max_iterations){
+        if( iterations > max_iterations){
 			break;
 		}
 	}
@@ -334,7 +322,7 @@ __device__ void switchNeighbor(float* nn_vecs, int k, float v_x, float v_y, floa
 		} else {
 			float dist_old = nn_vecs[i]*nn_vecs[i] + nn_vecs[i+1]*nn_vecs[i+1] + nn_vecs[i+2]*nn_vecs[i+2];
 			float dist_new = v_x*v_x + v_y*v_y + v_z*v_z;
-			if(dist_new < dist_old){
+            if(dist_new < dist_old) {
 				nn_vecs[i] = v_x;
 				nn_vecs[i+1] = v_y;
 				nn_vecs[i+2] = v_z;
@@ -343,109 +331,94 @@ __device__ void switchNeighbor(float* nn_vecs, int k, float v_x, float v_y, floa
 	}
 }
 
-__device__ void getNearestNeighbors(const PointArray& D_V, const PointArray& D_kd_tree, int k, int subtree_pos, int pos, int pos_value, float* nn_vecs, bool debug=false){
+__device__ void getNearestNeighbors(const PointArray& D_V,
+                                    const PointArray& D_kd_tree,
+                                    int k,
+                                    int subtree_pos,
+                                    int pos,
+                                    int pos_value,
+                                    float* nn_vecs )
+{
 	
 	
 	int iterator = subtree_pos;
 	int max_nodes = 1;
 	bool leaf_reached = false;
 	int i_nn = 0;
-	
-	
-	for( ;iterator < D_kd_tree.width; iterator=iterator*2+1, max_nodes*=2)
+
+    int query_index = pos_value * D_V.dim;
+
+    float query_x = D_V.elements[ query_index ];
+    float query_y = D_V.elements[ query_index + 1 ];
+    float query_z = D_V.elements[ query_index + 2 ];
+
+    // like width search
+    // go kd-tree up until max_nodes(leaf_nodes of subtree) bigger than needed nodes k
+    // iterator = iterator * 2 + 1 -> go to
+    for( ; iterator < D_kd_tree.width; iterator = iterator * 2 + 1, max_nodes *= 2)
 	{
+        // collect nodes from current height
 		for( int i=0; i < max_nodes && iterator + i < D_kd_tree.width; i++)
 		{
-			int current_pos = iterator+i;
-			int leaf_value = (int)(D_kd_tree.elements[current_pos]+0.5);
+            int current_pos = iterator + i;
+            int leaf_value  = (int)(D_kd_tree.elements[ current_pos ] + 0.5 );
 			
-			
-			if( leaf_reached && i_nn <= k*3 ){
-				
-				if(leaf_value != pos_value){
-					//~ printf("index: %d, neighbor_index: %d\n",pos_value,leaf_value);
-					//~ printf("tree_index: %d, tree_neighbor_index: %d\n",pos,current_pos);
-					
-					float nn_x = D_V.elements[leaf_value * D_V.dim] - D_V.elements[pos_value * D_V.dim];
-					float nn_y = D_V.elements[leaf_value * D_V.dim + 1 ] - D_V.elements[pos_value * D_V.dim + 1 ];
-					float nn_z = D_V.elements[leaf_value * D_V.dim + 2 ] - D_V.elements[pos_value * D_V.dim + 2 ];
+            if( leaf_reached && i_nn <= k*3 )
+            {
+                if( leaf_value != pos_value && leaf_value < D_V.width )
+                {
+                    int curr_nn_index = leaf_value * D_V.dim;
+
+                    float nn_x = D_V.elements[ curr_nn_index ] - query_x;
+                    float nn_y = D_V.elements[ curr_nn_index + 1 ] - query_y;
+                    float nn_z = D_V.elements[ curr_nn_index + 2 ] - query_z;
 					
 					if(nn_x != 0.0 || nn_y != 0.0 || nn_z != 0.0)
 					{
-						nn_vecs[i_nn] = nn_x;
-						nn_vecs[i_nn + 1] = nn_y;
-						nn_vecs[i_nn + 2] = nn_z;
-					
+                        nn_vecs[ i_nn ]     = nn_x;
+                        nn_vecs[ i_nn + 1 ] = nn_y;
+                        nn_vecs[ i_nn + 2 ] = nn_z;
 					
 						i_nn += 3;
-					}
-					
+                    }
 				}
-			}else if( current_pos*2+1 >= D_kd_tree.width){
+            } else if( current_pos * 2 + 1 >= D_kd_tree.width ) {
 				
+                int curr_nn_index = leaf_value * D_V.dim;
 				//first leaf reached 
 				leaf_reached = true;
-				if( leaf_value != pos_value && i_nn <= k*3 ){
-					//~ printf("index: %d, neighbor_index: %d\n",pos_value,leaf_value);
-					//~ printf("tree_index: %d, tree_neighbor_index: %d\n",pos,current_pos);
-					
-					
-					nn_vecs[i_nn] = D_V.elements[leaf_value * D_V.dim] - D_V.elements[pos_value * D_V.dim ];
-					nn_vecs[i_nn+1] = D_V.elements[leaf_value * D_V.dim + 1 ] - D_V.elements[pos_value * D_V.dim + 1 ];
-					nn_vecs[i_nn+2] = D_V.elements[leaf_value * D_V.dim + 2] - D_V.elements[pos_value * D_V.dim + 2 ];
+                if( leaf_value != pos_value && i_nn <= k*3 )
+                {
+                    nn_vecs[i_nn]   = D_V.elements[ curr_nn_index ] - query_x;
+                    nn_vecs[i_nn+1] = D_V.elements[ curr_nn_index + 1 ] - query_y;
+                    nn_vecs[i_nn+2] = D_V.elements[ curr_nn_index + 2] - query_z;
 					i_nn += 3;
 				}
-			}
-			
-			// restlichen values reinschmeissen
-			if( i_nn > k * 3){
-				if(leaf_value != pos_value){
-					//~ printf("index: %d, neighbor_index: %d\n",pos_value,leaf_value);
-					//~ printf("tree_index: %d, tree_neighbor_index: %d\n",pos,current_pos);
-					//~ float v_x = D_V.elements[leaf_value] - D_V.elements[pos_value];
-					//~ float v_y = D_V.elements[D_V.width + leaf_value] - D_V.elements[D_V.width + pos_value];
-					//~ float v_z = D_V.elements[2 * D_V.width + leaf_value] - D_V.elements[2 * D_V.width + pos_value];
-					
-					//~ switchNeighbor(nn_vecs, k, v_x, v_y, v_z);
-					
-				}
-			}
-			
+            }
 		}
-	}
-	
-	if(debug){
-		printf("i_nn: %d\n",i_nn);
-	}
+    }
 }
 
-__device__ bool checkLinearNeighborHood(const PointArray& D_V, const PointArray& D_kd_tree, int pos, int k, bool debug=false){
-	
+__device__ bool checkLinearNeighborHood(const PointArray& D_V,
+                                        const PointArray& D_kd_tree,
+                                        int pos,
+                                        int k )
+{
 	int number_true = 0;
 	int * split_positions = (int*)malloc(6*sizeof(int));
 	split_positions[0] = (int)((pos  - 1) / 2);
 	
 	for(int i=1; i<6; i++){
 		split_positions[i] = (int)((split_positions[i-1]  - 1) / 2);
-		
-	}
-	
-	if(debug){
-		int iter = pos;
-		for(; iter>0; iter=(int)((iter  - 1) / 2) ){
-			printf("%f\n", D_kd_tree.elements[iter ]);
-		}
 	}
 	
 	// check x
-	for(int i=0;i<3;i++)
+    for(int i=0; i<3; i++)
 	{
 		
 		if(split_positions[i+3] > 0 )
 		{
-			if(debug){
-				printf("linear check: %f %f\n",D_kd_tree.elements[split_positions[i+3] ], D_kd_tree.elements[split_positions[i] ]);
-			}
+
 			if(D_kd_tree.elements[split_positions[i+3] ] != D_kd_tree.elements[split_positions[i] ] )
 			{	
 				number_true += 1;
@@ -465,7 +438,12 @@ __device__ bool checkLinearNeighborHood(const PointArray& D_V, const PointArray&
 	}
 }
 
-__device__ void calculateNormalFromSubtree(const PointArray& D_V, const PointArray& D_kd_tree, int pos, int k, float& x, float& y, float& z, int method, bool debug=false )
+__device__ void calculateNormalFromSubtree(const PointArray& D_V,
+                                           const PointArray& D_kd_tree,
+                                           int pos,
+                                           int k,
+                                           float& x, float& y, float& z,
+                                           int method )
 {
 	//~ 
 	 //~  Step 1: get upper node
@@ -473,15 +451,7 @@ __device__ void calculateNormalFromSubtree(const PointArray& D_V, const PointArr
 	 //~  Step 3: calculate normals
 	 //~ 
 	
-	bool linear = checkLinearNeighborHood(D_V, D_kd_tree, pos, k, debug);
-	
-	if(debug){
-		if(linear){
-			printf("linear! \n");
-		}else{
-			printf("good! \n");
-		}
-	}
+    //bool linear = checkLinearNeighborHood(D_V, D_kd_tree, pos, k);
 	
 	int pos_value = (int)(D_kd_tree.elements[pos]+0.5);
 	
@@ -492,18 +462,18 @@ __device__ void calculateNormalFromSubtree(const PointArray& D_V, const PointArr
 	}
 	//~ printf("subtree_pos: %d\n",subtree_pos);
 	
+    // k+1 FIX
+    float * nn_vecs = (float*)malloc(3*(k+1)*sizeof(float));
 	
-	float * nn_vecs = (float*)malloc(3*k*sizeof(float));
 	
-	
-	getNearestNeighbors(D_V, D_kd_tree, k, subtree_pos, pos, pos_value, nn_vecs, debug); 
+    getNearestNeighbors(D_V, D_kd_tree, k, subtree_pos, pos, pos_value, nn_vecs);
 
 	if(method == 0){
 		//PCA
 		calculateNormalPCA(nn_vecs, k, x, y, z);
 	}else if(method == 1) {
 		//RANSAC
-		calculateNormalRansa2(nn_vecs, k, 8, x, y, z, debug);
+        calculateNormalRansa2(nn_vecs, k, 8, x, y, z);
 	}
 	
 	free(nn_vecs);
@@ -514,25 +484,21 @@ __device__ void calculateNormalFromSubtree(const PointArray& D_V, const PointArr
 __global__ void KNNKernel(const PointArray D_V, const PointArray D_kd_tree, PointArray D_Result_Normals, int k, int method)
 {
 	const unsigned int tid = blockDim.x * blockIdx.x + threadIdx.x;
-	
-	if(tid < D_V.width){
+
+	const unsigned int query_x = tid * D_Result_Normals.dim;
+	if(query_x + 2 < D_Result_Normals.width * D_Result_Normals.dim){
 		
-		int pos = GetKdTreePosition(D_kd_tree, D_V.elements[tid * D_V.dim], D_V.elements[tid * D_V.dim + 1], D_V.elements[tid * D_V.dim +2] );
+		int pos = GetKdTreePosition(D_kd_tree, D_V.elements[query_x], D_V.elements[query_x + 1], D_V.elements[query_x +2] );
 		
-		float result_x = D_Result_Normals.elements[tid * D_Result_Normals.dim ];
-		float result_y = D_Result_Normals.elements[tid * D_Result_Normals.dim + 1 ];
-		float result_z = D_Result_Normals.elements[tid * D_Result_Normals.dim + 2 ];
-		// no normal at 68088996
-		bool debug=false;
-		//~ if(tid == 10000){
-			//~ debug = true;
-		//~ }
+		float result_x = D_Result_Normals.elements[query_x ];
+		float result_y = D_Result_Normals.elements[query_x + 1 ];
+		float result_z = D_Result_Normals.elements[query_x + 2 ];
 		
-		calculateNormalFromSubtree(D_V, D_kd_tree, pos, k, result_x, result_y, result_z, method, debug);
-		
-		D_Result_Normals.elements[tid * D_Result_Normals.dim ] = result_x;
-		D_Result_Normals.elements[tid * D_Result_Normals.dim + 1 ] = result_y;
-		D_Result_Normals.elements[tid * D_Result_Normals.dim + 2 ] = result_z;
+        calculateNormalFromSubtree(D_V, D_kd_tree, pos, k, result_x, result_y, result_z, method);
+
+		D_Result_Normals.elements[query_x ] = result_x;
+		D_Result_Normals.elements[query_x + 1 ] = result_y;
+		D_Result_Normals.elements[query_x + 2 ] = result_z;
 		
 	}
 	
@@ -855,6 +821,7 @@ void CalcNormalsCuda::generateKdTreeRecursive(PointArray& V, PointArray* sorted_
 		
         int v = pow( 2, static_cast<int>(log2f(indices_size-1) ) );
 		int left_size = indices_size - v/2;
+
         if( left_size > v )
         {
 			left_size = v;
@@ -871,7 +838,7 @@ void CalcNormalsCuda::generateKdTreeRecursive(PointArray& V, PointArray* sorted_
 		// alloc new memory
         for( int i=0; i<max_dim; i++ )
         {
-			//memory corruption when malloc 
+            // memory corruption when malloc
 			
 			sorted_indices_left[i].width = left_size;
 			sorted_indices_left[i].dim = 1;
@@ -881,7 +848,7 @@ void CalcNormalsCuda::generateKdTreeRecursive(PointArray& V, PointArray* sorted_
 			sorted_indices_right[i].dim = 1;
 			sorted_indices_right[i].elements = (float*)malloc( (right_size+1) * sizeof(float) );
 			
-			if(i==current_dim){
+            if(i==current_dim){
 				splitPointArray( sorted_indices[i], sorted_indices_left[i], sorted_indices_right[i]);
 			}else{
 				splitPointArrayWithValue(V, sorted_indices[i], sorted_indices_left[i], sorted_indices_right[i], current_dim, split_value);
@@ -931,11 +898,11 @@ void CalcNormalsCuda::GPU_NN(PointArray& D_V, PointArray& D_kd_tree, PointArray&
 	int blocksPerGrid = (D_V.width + threadsPerBlock-1)/threadsPerBlock;
 
     // kNN-search and Normal calculation
-	KNNKernel<<<blocksPerGrid, threadsPerBlock >>>(D_V, D_kd_tree, D_Result_Normals, this->m_k, this->m_calc_method);
+    KNNKernel<<< blocksPerGrid, threadsPerBlock >>>(D_V, D_kd_tree, D_Result_Normals, this->m_k, this->m_calc_method);
     cudaDeviceSynchronize();
 
     // Flip normals to view point
-	FlipNormalsKernel<<<blocksPerGrid, threadsPerBlock >>>(D_V, D_Result_Normals, this->m_vx, this->m_vy, this->m_vz);
+    FlipNormalsKernel<<< blocksPerGrid, threadsPerBlock >>>(D_V, D_Result_Normals, this->m_vx, this->m_vy, this->m_vz);
 	cudaDeviceSynchronize();
 
     //TODO: Interpolate
@@ -947,8 +914,7 @@ void CalcNormalsCuda::GPU_NN(PointArray& D_V, PointArray& D_kd_tree, PointArray&
 }
 
 void CalcNormalsCuda::initKdTree() {
-	
-	//~ struct Matrix test;
+
 	struct PointArray indices_sorted[this->V.dim];
 	struct PointArray values_sorted[this->V.dim];
 	

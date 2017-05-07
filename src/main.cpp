@@ -506,7 +506,7 @@ void writePlyFile(float* V, size_t m_numVertices, float* Result_Normals, size_t 
 
 int main(int argc, char** argv){
 	
-    const char* in_file = "/home/amock/datasets/polizei/raw/polizei30M_cut.ply";
+    const char* in_file = "/home/amock/polizei30M_cut.ply";
     const char* out_file = "output_mesh.ply";
 	
 	size_t point_size;
@@ -517,7 +517,7 @@ int main(int argc, char** argv){
 	normals.dim = 3;
 	
     std::cout << "Reading file " << in_file << " ..." << std::endl;
-	readPlyFile(points, point_size, in_file, 1.0);
+    readPlyFile(points, point_size, in_file, 1.0);
     std::cout << "Finished reading file. " << point_size << std::endl;
 
 	points.width = point_size;
