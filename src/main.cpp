@@ -26,7 +26,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <cstring>
-#include "calcNormalsCuda.h"
+#include "calcNormalsCuda.hpp"
 #include "rply/rply.h"
 
 typedef boost::shared_array<unsigned int> uintArr;
@@ -506,7 +506,7 @@ void writePlyFile(float* V, size_t m_numVertices, float* Result_Normals, size_t 
 
 int main(int argc, char** argv){
 	
-    const char* in_file = "/home/amock/polizei30M_cut.ply";
+    const char* in_file = "/home/amock/scan001.ply";
     const char* out_file = "output_mesh.ply";
 	
 	size_t point_size;

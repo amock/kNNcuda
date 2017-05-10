@@ -35,9 +35,13 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} "-arch=sm_50")
 include_directories(${CUDA_INCLUDE_DIRS})
 include_directories(include)
 
+# header in srcs because qt-creator cannot find header files
 set(NORMALS_CUDA_SRCS
-        include/calcNormalsCuda.h
+        include/calcNormalsCuda.hpp
+        include/LBKdTree.hpp
+        include/PointArray.hpp
         src/calcNormalsCuda.cu
+        src/LBKdTree.cpp
 )
 
 #add library to link by calcNormalsCuda.h usage
@@ -83,4 +87,11 @@ add_executable(Example src/main.cpp include/rply/rply.c)
 
 target_link_libraries(Example
 	cudaNormals
+)
+
+cuda_add_executable(Test src/cuda_test.cu)
+
+target_link_libraries(Test
+	${CUDA_LIBRARIES}
+	${CUDA_CUDA_LIBRARY}
 )

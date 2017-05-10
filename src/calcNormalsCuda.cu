@@ -22,7 +22,11 @@
  * @author Matthias Greshake
  */
 
-#include "calcNormalsCuda.h"
+#include "calcNormalsCuda.hpp"
+
+/// Shared Memory for Nearest Neighbors
+
+extern __shared__ float knn[];
 
 /// Define Kernels
 
@@ -144,7 +148,7 @@ __device__ void calculateNormalRansa2(float* nn_vecs, int k, int max_iterations,
 				
 				iterations ++;
 			
-			}else{
+            } else {
 				
 				return;
 				
@@ -544,19 +548,19 @@ CalcNormalsCuda::CalcNormalsCuda(PointArray& points)
 void CalcNormalsCuda::getCudaInformation()
 {
 	
-	m_mps = 0;
-	m_threads_per_mp = 0;
-	m_threads_per_block = 0;
-	m_size_thread_block = new int(3);
-	m_size_grid = new int(3);
-	m_device_global_memory = 0;
-	
-	
-	cudaSetDevice(0);
+    m_mps = 0;
+    m_threads_per_mp = 0;
+    m_threads_per_block = 0;
+    m_size_thread_block = new int(3);
+    m_size_grid = new int(3);
+    m_device_global_memory = 0;
+
+
+    cudaSetDevice(0);
     cudaDeviceProp deviceProp;
     cudaGetDeviceProperties(&deviceProp, 0);
-    
-    
+
+    m_shared_memory_size = deviceProp.sharedMemPerBlock;
     m_mps = deviceProp.multiProcessorCount;
     m_threads_per_mp = deviceProp.maxThreadsPerMultiProcessor;
     m_threads_per_block = deviceProp.maxThreadsPerBlock;
@@ -570,6 +574,23 @@ void CalcNormalsCuda::getCudaInformation()
     
 }
 
+void CalcNormalsCuda::calculateBlocksThreads(int n, int elements, int element_size, int max_mem_shared, int max_threads_per_block,
+                            int& out_blocks_per_grid, int& out_threads_per_block, int& needed_shared_memory)
+{
+    int mem_per_thread_needed = elements * element_size;
+
+    out_threads_per_block = max_mem_shared / mem_per_thread_needed;
+
+    if( out_threads_per_block > max_threads_per_block )
+    {
+        out_threads_per_block = max_threads_per_block;
+    }
+
+    out_blocks_per_grid = ( n + out_threads_per_block - 1 ) / out_threads_per_block;
+
+    needed_shared_memory = out_threads_per_block * element_size * elements;
+}
+
 void CalcNormalsCuda::getNormals(PointArray& output_normals)
 {
 	
@@ -581,21 +602,6 @@ void CalcNormalsCuda::getNormals(PointArray& output_normals)
 	{	
 		output_normals.elements[i] = this->Result_Normals.elements[i];
 	}
-	
-}
-
-void CalcNormalsCuda::mallocPointArray(PointArray& m) {
-
-	m.elements = (float*)malloc(m.width * m.dim * sizeof(float));
-
-}
-
-void CalcNormalsCuda::generateHostPointArray(PointArray& m, int width, int dim)
-{
-	
-	m.dim = dim;
-	m.width = width;
-	m.elements = (float*)malloc(m.width * m.dim * sizeof(float) );
 	
 }
 
@@ -620,282 +626,38 @@ void CalcNormalsCuda::copyToHostPointArray(PointArray& D_m, PointArray& m) {
 	size_t size = m.width * m.dim * sizeof(float);
     HANDLE_ERROR( cudaMemcpy(m.elements, D_m.elements, size, cudaMemcpyDeviceToHost) );
 	
-}
+} 
 
-void CalcNormalsCuda::fillPointArrayWithSequence(PointArray& m) {
+/// Test shared memoryd
+void CalcNormalsCuda::GPU_NN_2(PointArray& D_V, PointArray& D_kd_tree, PointArray& D_Result_Normals, PointArray& Result_Normals) {
+    ///
+    int blocks_per_grid, threads_per_block, needed_shared_memory;
 
-    for(int i=0;i<m.width*m.dim;i++)
-    {
-		m.elements[i] = i;
-	}
+    this->calculateBlocksThreads(this->V.width, this->m_k, 3*sizeof(float), this->m_shared_memory_size, this->m_threads_per_block,
+                           blocks_per_grid, threads_per_block, needed_shared_memory);
 
-}  
+    // kNN-search and Normal calculation
+    KNNKernel<<< blocks_per_grid, threads_per_block, needed_shared_memory >>>(D_V, D_kd_tree, D_Result_Normals, this->m_k, this->m_calc_method);
+    cudaDeviceSynchronize();
 
-void CalcNormalsCuda::copyDimensionToPointArray(PointArray& in, int dim, PointArray& out) {
+    // Flip normals to view point
+    FlipNormalsKernel<<< blocks_per_grid, threads_per_block, needed_shared_memory >>>(D_V, D_Result_Normals, this->m_vx, this->m_vy, this->m_vz);
+    cudaDeviceSynchronize();
 
-    for(int i = 0; i<out.width; i++)
-    {
-		out.elements[i] = in.elements[i * in.dim + dim];
-	}
-}
+    //TODO: Interpolate
 
-void CalcNormalsCuda::copyVectorInterval(PointArray& in, int start, int end, PointArray& out) {
+    size_t size = Result_Normals.width * Result_Normals.dim * sizeof(float);
 
-    for(int i=0; i < (end-start); i++)
-    {
-		out.elements[i] = in.elements[i + start];
-	}
-}
+    HANDLE_ERROR( cudaMemcpy(Result_Normals.elements, D_Result_Normals.elements, size, cudaMemcpyDeviceToHost ) );
 
-void CalcNormalsCuda::mergeHostWithIndices(float* a, float* b, int i1, int j1, int i2, int j2, int limit) {
-
-    int limit_end = limit;
-	
-	float* temp = (float*) malloc((j2-i1+1) * sizeof(float));  //array used for merging
-    int* temp_indices = (int*) malloc((j2-i1+1) * sizeof(int));  //array used for merging
-    
-    int i,j,k;
-    i=i1;    //beginning of the first list
-    j=i2;    //beginning of the second list
-    k=0;
-    
-    int counter = 0;
-
-    while( i<=j1 && j<=j2 && limit!=0 )    //while elements in both lists
-    {
-		counter ++;
-		limit--;
-        if(a[i]<a[j]){
-			temp_indices[k] = b[i]; 
-            temp[k++]=a[i++];
-            
-        }else{
-			temp_indices[k] = b[j];
-            temp[k++]=a[j++];
-		}
-    }
-    
-    while(i <= j1 && limit != 0) //copy remaining elements of the first list
-    {
-		temp_indices[k] = b[i]; 
-        temp[k++]=a[i++];
-	}
-        
-    while(j <= j2 && limit!=0 ) {   //copy remaining elements of the second list
-        temp_indices[k] = b[j]; 
-        temp[k++]=a[j++];
-	}
-        
-    //Transfer elements from temp[] back to a[]
-    for(i=i1,j=0;i<=j2 && limit_end!=0 ;i++,j++,limit_end--)
-	{
-		b[i] = temp_indices[j];
-		if(b[i] < 0){
-			printf("THERE IS SOMETHING WRONG\n");
-		}
-        a[i] = temp[j];
-    }
-
-    free(temp_indices);
-    free(temp);
-}
-
-
-void CalcNormalsCuda::naturalMergeSort(PointArray& in, int dim, PointArray& indices, PointArray& m, int limit) {
-	
-	copyDimensionToPointArray(in, dim, m);
-
-	int m_elements = m.width * m.dim;
-	
-	int slide_buffer_size = int(m_elements-0.5);
-	int* slide_buffer = (int*) malloc(slide_buffer_size * sizeof(int));
-	
-
-	//create RUNS
-	int num_slides = 1;
-	slide_buffer[0] = 0;
-	for(int i=1; i < slide_buffer_size+1; i++) 
-	{
-		if(m.elements[i] < m.elements[i-1])
-		{
-			slide_buffer[num_slides] = i;
-			num_slides++;
-		}
-		
-	}
-	slide_buffer[num_slides] = m_elements;
-	slide_buffer_size = num_slides+1;
-	
-	
-	//sort 
-	int count = 0;
-	int current_limit = -1;
-	while(num_slides > 1)
-	{
-		if(num_slides > 2){
-			current_limit = limit;
-		}
-		
-		int i;
-		
-		for(i=2;i<int(num_slides+1);i+=2)
-		{
-				
-			mergeHostWithIndices(m.elements, indices.elements , slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1, current_limit);
-			
-			
-			slide_buffer[i/2]= slide_buffer[i];
-		}
-		
-		if(num_slides%2 == 1){
-			slide_buffer[(num_slides+1)/2] = slide_buffer[num_slides];
-		}
-		
-		count ++;
-		num_slides = int(num_slides/2.0+0.5);
-		
-	}
-	
-	free(slide_buffer);
-}
-
-void CalcNormalsCuda::sortByDim(PointArray& V, int dim, PointArray& indices, PointArray& values) {
-
-    naturalMergeSort(V, dim, indices, values);
-
-}
-
-void CalcNormalsCuda::splitPointArray(PointArray& I, PointArray& I_L, PointArray& I_R) {
-	
-	int i=0;
-	for(; i < I_L.width * I_L.dim; i++){
-		I_L.elements[i] = I.elements[i];
-	}
-	int j=0;
-	for(; i<I.width*I.dim && j<I_R.width*I_R.dim; i++, j++){
-		I_R.elements[j] = I.elements[i];
-	}
-	
-}
-
-void CalcNormalsCuda::splitPointArrayWithValue(PointArray& V, PointArray& I, PointArray& I_L, PointArray& I_R, int current_dim, float value) {
-
-    int i_l = 0;
-	int i_r = 0;
-	
-	for(int i=0; i<I.width; i++)
-	{
-		float current_value = V.elements[static_cast<int>(I.elements[i] + 0.5) * V.dim + current_dim ];
-		//~ printf("curr val: %f\n", current_value);
-		if(current_value <= value && I_L.width > i_l ){
-			//~ printf("add to left: %f with value %f\n", I.elements[i], current_value);
-			I_L.elements[i_l++] = I.elements[i];
-		}else if(current_value >= value && I_R.width > i_r){
-			//~ printf("add to right: %f with value %f\n", I.elements[i], current_value);
-			I_R.elements[i_r++] = I.elements[i];
-		}else {
-			if(i_r<I_R.width){
-				I_R.elements[i_r++] = I.elements[i];
-			}else if(i_l<I_L.width){
-				I_L.elements[i_l++] = I.elements[i];
-			}
-		}
-	}
-		
-}
-
-
-void CalcNormalsCuda::generateKdTreeRecursive(PointArray& V, PointArray* sorted_indices, int current_dim, int max_dim, PointArray& kd_tree, int size, int max_tree_depth, int position) {
-	
-	int left = position*2+1;
-	int right = position*2+2;
-	
-    if( right > size-1 || left > size-1 )
-    {
-
-		kd_tree.elements[position] = sorted_indices[current_dim].elements[0];
-
-    } else {
-		/// split sorted_indices
-		int indices_size = sorted_indices[current_dim].width;
-		
-        int v = pow( 2, static_cast<int>(log2f(indices_size-1) ) );
-		int left_size = indices_size - v/2;
-
-        if( left_size > v )
-        {
-			left_size = v;
-		}
-		int right_size = indices_size - left_size;
-		
-        float split_value = ( V.elements[current_dim+static_cast<int>(sorted_indices[current_dim].elements[left_size-1])*V.dim ] + V.elements[current_dim+static_cast<int>(sorted_indices[current_dim].elements[left_size] ) * V.dim] ) /2.0;
-		
-        kd_tree.elements[ position ] = split_value;
-		
-		struct PointArray sorted_indices_left[max_dim];
-		struct PointArray sorted_indices_right[max_dim];
-		
-		// alloc new memory
-        for( int i=0; i<max_dim; i++ )
-        {
-            // memory corruption when malloc
-			
-			sorted_indices_left[i].width = left_size;
-			sorted_indices_left[i].dim = 1;
-			sorted_indices_left[i].elements = (float*)malloc( (left_size+1) *sizeof(float) );
-			
-			sorted_indices_right[i].width = right_size;
-			sorted_indices_right[i].dim = 1;
-			sorted_indices_right[i].elements = (float*)malloc( (right_size+1) * sizeof(float) );
-			
-            if(i==current_dim){
-				splitPointArray( sorted_indices[i], sorted_indices_left[i], sorted_indices_right[i]);
-			}else{
-				splitPointArrayWithValue(V, sorted_indices[i], sorted_indices_left[i], sorted_indices_right[i], current_dim, split_value);
-			}
-			
-		}
-		
-		generateKdTreeRecursive(V, sorted_indices_left, (current_dim+1)%max_dim, max_dim, kd_tree, size, max_tree_depth, left);
-		generateKdTreeRecursive(V, sorted_indices_right, (current_dim+1)%max_dim, max_dim, kd_tree, size, max_tree_depth, right);		
-	
-		
-		// alloc new memory
-        for(int i=0; i<max_dim; i++)
-        {
-            free( sorted_indices_left[i].elements );
-            free( sorted_indices_right[i].elements );
-		}
-	}
-	
-	
-}
-
-void CalcNormalsCuda::generateKdTreeArray(PointArray& V, PointArray* sorted_indices, int max_dim, PointArray& kd_tree) {
-
-    int size;
-	int max_tree_depth;
-	
-	max_tree_depth = static_cast<int>( log2f(V.width - 1 ) + 2.0 ) ;
-
-	if (V.width == 1)
-	{
-		max_tree_depth = 1;
-	}
-	
-	size = V.width * 2 - 1;
-	
-    generateHostPointArray(kd_tree, size, 1);
-	
-	//start real generate
-	generateKdTreeRecursive(V, sorted_indices, 0, max_dim, kd_tree, size, max_tree_depth, 0);
-	
 }
 
 void CalcNormalsCuda::GPU_NN(PointArray& D_V, PointArray& D_kd_tree, PointArray& D_Result_Normals, PointArray& Result_Normals) {
 	
     int threadsPerBlock = this->m_threads_per_block;
 	int blocksPerGrid = (D_V.width + threadsPerBlock-1)/threadsPerBlock;
+
+
 
     // kNN-search and Normal calculation
     KNNKernel<<< blocksPerGrid, threadsPerBlock >>>(D_V, D_kd_tree, D_Result_Normals, this->m_k, this->m_calc_method);
@@ -914,29 +676,8 @@ void CalcNormalsCuda::GPU_NN(PointArray& D_V, PointArray& D_kd_tree, PointArray&
 }
 
 void CalcNormalsCuda::initKdTree() {
-
-	struct PointArray indices_sorted[this->V.dim];
-	struct PointArray values_sorted[this->V.dim];
-	
-	for(int i=0; i < this->V.dim; i++)
-	{
-        generateHostPointArray(indices_sorted[i], V.width, 1);
-		
-        generateHostPointArray(values_sorted[i], V.width, 1);
-		
-		fillPointArrayWithSequence(indices_sorted[i]);
-		
-		sortByDim( this->V, i, indices_sorted[i] , values_sorted[i]);
-	}
-
-	generateKdTreeArray(V, indices_sorted, this->V.dim, this->kd_tree);
-	
-	for(int i=0; i<V.dim;i++)
-	{
-		free(indices_sorted[i].elements);
-		free(values_sorted[i].elements);
-	}
-
+    kd_tree_gen = new LBKdTree(this->V);
+    this->kd_tree = kd_tree_gen->getKdTreeArray();
 }
 
 void CalcNormalsCuda::setK(int k) {
@@ -986,7 +727,7 @@ void CalcNormalsCuda::printSettings() {
 
 void CalcNormalsCuda::start() {
 	
-	generateHostPointArray( this->Result_Normals, V.width, V.dim);
+    generatePointArray( this->Result_Normals, V.width, V.dim);
 	
 	PointArray D_V, D_kd_tree, D_Result_Normals;
 	generateDevicePointArray( D_V, this->V.width, this->V.dim );
@@ -998,7 +739,7 @@ void CalcNormalsCuda::start() {
 	copyToDevicePointArray( this->kd_tree, D_kd_tree);
 	
 	//Cuda Kernels
-	GPU_NN(D_V, D_kd_tree, D_Result_Normals, this->Result_Normals);
+    GPU_NN_2(D_V, D_kd_tree, D_Result_Normals, this->Result_Normals);
 	
 	cudaFree(D_V.elements);
 	cudaFree(D_kd_tree.elements);
