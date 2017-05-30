@@ -6,9 +6,9 @@ project(cudaNormals C CXX)
 ##### CUDANORMALS ######
 
 # uncomment of CUDA_TOOLKIT_ROOT_DIR is not found
-set(CUDA_TOOLKIT_ROOT_DIR
-    /usr/local/cuda/
-)
+#set(CUDA_TOOLKIT_ROOT_DIR
+#    /usr/local/cuda/
+#)
 
 # -- [ this option causes problems for some reason, so turn it off before searching for CUDA
 if(MSVC)
@@ -28,7 +28,7 @@ set(HAVE_CUDA 1)
 
 #--debug
 #set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} "--ftz=true;--prec-div=false;--prec-sqrt=false")
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} "-arch=sm_50")
+#set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} "-arch=sm_50")
 
 #### CUDA NORMALS CODE #####
 
