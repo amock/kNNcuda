@@ -175,6 +175,7 @@ private:
 	int* m_size_thread_block;
 	int* m_size_grid;
 	unsigned long long m_device_global_memory;
+    int m_warp_size;
 		
 };
 

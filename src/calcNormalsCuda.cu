@@ -567,7 +567,7 @@ void CalcNormalsCuda::getCudaInformation()
     m_size_grid[1] = deviceProp.maxGridSize[1];
     m_size_grid[2] = deviceProp.maxGridSize[2];
     m_device_global_memory = (unsigned long long) deviceProp.totalGlobalMem;
-    
+    m_warp_size = deviceProp.warpSize; 
 }
 
 void CalcNormalsCuda::getNormals(PointArray& output_normals)
@@ -894,8 +894,10 @@ void CalcNormalsCuda::generateKdTreeArray(PointArray& V, PointArray* sorted_indi
 
 void CalcNormalsCuda::GPU_NN(PointArray& D_V, PointArray& D_kd_tree, PointArray& D_Result_Normals, PointArray& Result_Normals) {
 	
-    int threadsPerBlock = this->m_threads_per_block;
-	int blocksPerGrid = (D_V.width + threadsPerBlock-1)/threadsPerBlock;
+    //int threadsPerBlock = this->m_threads_per_block;
+	// Warp error fix
+    int threadsPerBlock = this->m_warp_size;
+    int blocksPerGrid = (D_V.width + threadsPerBlock-1)/threadsPerBlock;
 
     // kNN-search and Normal calculation
     KNNKernel<<< blocksPerGrid, threadsPerBlock >>>(D_V, D_kd_tree, D_Result_Normals, this->m_k, this->m_calc_method);
