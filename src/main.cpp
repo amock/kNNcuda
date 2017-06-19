@@ -27,7 +27,8 @@
 #include <iostream>
 #include <cstring>
 #include "calcNormalsCuda.hpp"
-#include "rply/rply.h"
+#include "../ext/rply/rply.h"
+#include "../ext/CTPL/ctpl.h"
 
 typedef boost::shared_array<unsigned int> uintArr;
 
@@ -506,7 +507,7 @@ void writePlyFile(float* V, size_t m_numVertices, float* Result_Normals, size_t 
 
 int main(int argc, char** argv){
 	
-    const char* in_file = "/home/amock/scan001.ply";
+    const char* in_file = "/home/amock/.ros/test3.ply";
     const char* out_file = "output_mesh.ply";
 	
 	size_t point_size;
@@ -544,3 +545,4 @@ int main(int argc, char** argv){
 	free(points.elements);
 	return 1;
 }
+

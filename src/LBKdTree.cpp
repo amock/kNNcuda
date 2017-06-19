@@ -5,7 +5,7 @@
 /// Public
 
 LBKdTree::LBKdTree(){
-
+    pool = std::shared_ptr<ctpl::thread_pool>(new ctpl::thread_pool(8) );
 }
 
 LBKdTree::LBKdTree( PointArray& vertices) {
@@ -26,6 +26,8 @@ void LBKdTree::generateKdTree(PointArray &vertices) {
 
         this->sortByDim( vertices, i, indices_sorted[i] , values_sorted[i]);
     }
+
+    //this->pool.stop(true);
 
     this->generateKdTreeArray(vertices, indices_sorted, vertices.dim, this->kd_tree);
 
@@ -112,7 +114,6 @@ void LBKdTree::generateKdTreeRecursive(PointArray& V, PointArray* sorted_indices
             }else{
                 splitPointArrayWithValue(V, sorted_indices[i], sorted_indices_left[i], sorted_indices_right[i], current_dim, split_value);
             }
-
         }
 
         generateKdTreeRecursive(V, sorted_indices_left, (current_dim+1)%max_dim, max_dim, kd_tree, size, max_tree_depth, left);
