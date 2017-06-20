@@ -23,10 +23,11 @@ public:
 
     PointArray getKdTreeArray();
 
+    
+
 private:
 
-    void generateKdTreeRecursive(PointArray& V, PointArray* sorted_indices, int current_dim, int max_dim, PointArray& kd_tree, int size, int max_tree_depth, int position);
-
+    
     void generateKdTreeArray(PointArray& V, PointArray* sorted_indices, int max_dim, PointArray& kd_tree);
 
     //void generateAndSort(int id, PointArray& vertices, PointArray* indices_sorted, PointArray* values_sorted, int dim);
@@ -39,8 +40,17 @@ private:
 
     PointArray kd_tree;
 
-    std::shared_ptr<ctpl::thread_pool> pool;
+    static ctpl::thread_pool *pool;
+
+    static void generateKdTreeRecursive(int id, PointArray& V, PointArray* sorted_indices, int current_dim, int max_dim, PointArray& kd_tree, int size, int max_tree_depth, int position, int current_depth);
+
+    static void test(int id, PointArray* sorted_indices);
+
+    
 
 };
+
+
+
 
 #endif // !__LBKDTREE_HPP

@@ -72,7 +72,7 @@ static void copyDimensionToPointArray(PointArray& in, int dim, PointArray& out) 
 }
 
 static void splitPointArray(PointArray& I, PointArray& I_L, PointArray& I_R) {
-
+    
     int i=0;
     for(; i < I_L.width * I_L.dim; i++){
         I_L.elements[i] = I.elements[i];
@@ -96,10 +96,10 @@ static void splitPointArrayWithValue(PointArray& V, PointArray& I, PointArray& I
         if(current_value <= value && I_L.width > i_l ){
             //~ printf("add to left: %f with value %f\n", I.elements[i], current_value);
             I_L.elements[i_l++] = I.elements[i];
-        }else if(current_value >= value && I_R.width > i_r){
+        } else if(current_value >= value && I_R.width > i_r){
             //~ printf("add to right: %f with value %f\n", I.elements[i], current_value);
             I_R.elements[i_r++] = I.elements[i];
-        }else {
+        } else {
             if(i_r<I_R.width){
                 I_R.elements[i_r++] = I.elements[i];
             }else if(i_l<I_L.width){
@@ -228,9 +228,6 @@ static void sortByDim(PointArray& V, int dim, PointArray& indices, PointArray& v
     naturalMergeSort(V, dim, indices, values);
 
 }
-
-
-
 
 static void generateAndSort(int id, PointArray& vertices, PointArray* indices_sorted, PointArray* values_sorted, int dim)
 {

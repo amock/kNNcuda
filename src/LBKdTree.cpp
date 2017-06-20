@@ -2,15 +2,17 @@
 #include <stdio.h>
 #include <iostream>
 
+// Static variables
+
+ctpl::thread_pool* LBKdTree::pool = new ctpl::thread_pool(8);
 
 /// Public
 
 LBKdTree::LBKdTree(){
-    this->pool = std::shared_ptr<ctpl::thread_pool>(new ctpl::thread_pool(8) );
+
 }
 
 LBKdTree::LBKdTree( PointArray& vertices) {
-    this->pool = std::shared_ptr<ctpl::thread_pool>(new ctpl::thread_pool(8) );
     this->generateKdTree(vertices);
 }
 
@@ -36,10 +38,11 @@ void LBKdTree::generateKdTree(PointArray &vertices) {
 
     for(int i=0; i< vertices.dim; i++)
     {
-        this->pool->push(generateAndSort, vertices, &(indices_sorted[i]), &(values_sorted[i]), i);
+        pool->push(generateAndSort, vertices, &(indices_sorted[i]), &(values_sorted[i]), i);
     }
     
-    this->pool->stop(true);
+    pool->stop(true);
+    pool = new ctpl::thread_pool(8);
     
     std::cout << "Kd tree" << std::endl;
 
@@ -47,7 +50,7 @@ void LBKdTree::generateKdTree(PointArray &vertices) {
 
     for(int i=0; i<vertices.dim;i++)
     {
-        free(indices_sorted[i].elements);
+        //free(indices_sorted[i].elements);
         free(values_sorted[i].elements);
     }
 }
@@ -75,14 +78,19 @@ void LBKdTree::generateKdTreeArray(PointArray& V, PointArray* sorted_indices, in
     generatePointArray(kd_tree, size, 1);
 
     //start real generate
-    generateKdTreeRecursive(V, sorted_indices, 0, max_dim, kd_tree, size, max_tree_depth, 0);
+    //generateKdTreeRecursive(0, V, sorted_indices, 0, max_dim, kd_tree, size, max_tree_depth, 0);
 
+    pool->push(generateKdTreeRecursive, V, sorted_indices, 0, max_dim, kd_tree, size, max_tree_depth, 0, 0);
+
+    pool->stop(true);
+    pool = new ctpl::thread_pool(8);
 }
 
-void LBKdTree::generateKdTreeRecursive(PointArray& V, PointArray* sorted_indices, int current_dim, int max_dim, PointArray& kd_tree, int size, int max_tree_depth, int position) {
-
+void LBKdTree::generateKdTreeRecursive(int id, PointArray& V, PointArray sorted_indices[], int current_dim, int max_dim, PointArray& kd_tree, int size, int max_tree_depth, int position, int current_depth) {
+        
     int left = position*2+1;
     int right = position*2+2;
+
 
     if( right > size-1 || left > size-1 )
     {
@@ -106,13 +114,11 @@ void LBKdTree::generateKdTreeRecursive(PointArray& V, PointArray* sorted_indices
 
         kd_tree.elements[ position ] = split_value;
 
-        struct PointArray sorted_indices_left[max_dim];
-        struct PointArray sorted_indices_right[max_dim];
+        PointArray *sorted_indices_left = (PointArray*)malloc( 3*sizeof(PointArray) );
+        PointArray *sorted_indices_right = (PointArray*)malloc( 3*sizeof(PointArray) );
 
-        // alloc new memory
         for( int i=0; i<max_dim; i++ )
         {
-            // memory corruption when malloc
 
             sorted_indices_left[i].width = left_size;
             sorted_indices_left[i].dim = 1;
@@ -124,23 +130,29 @@ void LBKdTree::generateKdTreeRecursive(PointArray& V, PointArray* sorted_indices
 
             if( i == current_dim ){
                 splitPointArray( sorted_indices[i], sorted_indices_left[i], sorted_indices_right[i]);
-            }else{
+            } else {
                 splitPointArrayWithValue(V, sorted_indices[i], sorted_indices_left[i], sorted_indices_right[i], current_dim, split_value);
             }
+
         }
 
-        generateKdTreeRecursive(V, sorted_indices_left, (current_dim+1)%max_dim, max_dim, kd_tree, size, max_tree_depth, left);
-        generateKdTreeRecursive(V, sorted_indices_right, (current_dim+1)%max_dim, max_dim, kd_tree, size, max_tree_depth, right);
-
-
-        // alloc new memory
-        for(int i=0; i<max_dim; i++)
-        {
-            free( sorted_indices_left[i].elements );
-            free( sorted_indices_right[i].elements );
+        //threadeeen
+        int next_dim = (current_dim+1)%max_dim;
+        
+        // thread pool when split
+        if(current_depth < 2){
+            pool->push(generateKdTreeRecursive, V, sorted_indices_left, next_dim, max_dim, kd_tree, size, max_tree_depth, left, current_depth + 1);
+            pool->push(generateKdTreeRecursive, V, sorted_indices_right, next_dim, max_dim, kd_tree, size, max_tree_depth, right, current_depth +1);
+        } else {
+            generateKdTreeRecursive(0, V, sorted_indices_left, (current_dim+1)%max_dim, max_dim, kd_tree, size, max_tree_depth, left, current_depth + 1);
+            generateKdTreeRecursive(0, V, sorted_indices_right, (current_dim+1)%max_dim, max_dim, kd_tree, size, max_tree_depth, right, current_depth +1);
         }
+
     }
 
+    for(int i=0; i<max_dim; i++) {
+        free(sorted_indices[i].elements );
+    }
 
 }
 
