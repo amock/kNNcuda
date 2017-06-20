@@ -2,13 +2,13 @@
 #define __POINTARRAY_HPP
 
 #include <stdlib.h>
+#include <iostream>
 
 struct PointArray {
     int width;
     int dim;
     float* elements;
 };
-
 
 // static helper methods
 
@@ -27,7 +27,26 @@ static void generatePointArray(PointArray& m, int width, int dim)
 
 }
 
+static void generatePointArray(int id, PointArray& m, int width, int dim)
+{
+
+    m.dim = dim;
+    m.width = width;
+    m.elements = (float*)malloc(m.width * m.dim * sizeof(float) );
+
+}
+
 static void fillPointArrayWithSequence(PointArray& m) {
+
+    for(int i=0;i<m.width*m.dim;i++)
+    {
+        m.elements[i] = i;
+    }
+
+}
+
+// Pool function
+static void fillPointArrayWithSequence(int id, PointArray& m) {
 
     for(int i=0;i<m.width*m.dim;i++)
     {
@@ -88,6 +107,139 @@ static void splitPointArrayWithValue(PointArray& V, PointArray& I, PointArray& I
             }
         }
     }
+
+}
+
+// SORT FUNCTIONS THREADED
+
+
+static void mergeHostWithIndices(float* a, float* b, int i1, int j1, int i2, int j2, int limit) {
+
+    int limit_end = limit;
+
+    float* temp = (float*) malloc((j2-i1+1) * sizeof(float));  //array used for merging
+    int* temp_indices = (int*) malloc((j2-i1+1) * sizeof(int));  //array used for merging
+
+    int i,j,k;
+    i=i1;    //beginning of the first list
+    j=i2;    //beginning of the second list
+    k=0;
+
+    int counter = 0;
+
+    while( i<=j1 && j<=j2 && limit!=0 )    //while elements in both lists
+    {
+        counter ++;
+        limit--;
+        if(a[i]<a[j]){
+            temp_indices[k] = b[i];
+            temp[k++]=a[i++];
+
+        }else{
+            temp_indices[k] = b[j];
+            temp[k++]=a[j++];
+        }
+    }
+
+    while(i <= j1 && limit != 0) //copy remaining elements of the first list
+    {
+        temp_indices[k] = b[i];
+        temp[k++]=a[i++];
+    }
+
+    while(j <= j2 && limit!=0 ) {   //copy remaining elements of the second list
+        temp_indices[k] = b[j];
+        temp[k++]=a[j++];
+    }
+
+    //Transfer elements from temp[] back to a[]
+    for(i=i1,j=0;i<=j2 && limit_end!=0 ;i++,j++,limit_end--)
+    {
+        b[i] = temp_indices[j];
+        if(b[i] < 0){
+            printf("THERE IS SOMETHING WRONG\n");
+        }
+        a[i] = temp[j];
+    }
+
+    free(temp_indices);
+    free(temp);
+}
+
+static void naturalMergeSort(PointArray& in, int dim, PointArray& indices, PointArray& m, int limit=-1) {
+
+    copyDimensionToPointArray(in, dim, m);
+
+    int m_elements = m.width * m.dim;
+
+    int slide_buffer_size = int(m_elements-0.5);
+    int* slide_buffer = (int*) malloc(slide_buffer_size * sizeof(int));
+
+
+    //create RUNS
+    int num_slides = 1;
+    slide_buffer[0] = 0;
+    for(int i=1; i < slide_buffer_size+1; i++)
+    {
+        if(m.elements[i] < m.elements[i-1])
+        {
+            slide_buffer[num_slides] = i;
+            num_slides++;
+        }
+
+    }
+    slide_buffer[num_slides] = m_elements;
+    slide_buffer_size = num_slides+1;
+
+
+    //sort
+    int count = 0;
+    int current_limit = -1;
+    while(num_slides > 1)
+    {
+        if(num_slides > 2){
+            current_limit = limit;
+        }
+
+        int i;
+
+        for(i=2;i<int(num_slides+1);i+=2)
+        {
+            mergeHostWithIndices(m.elements, indices.elements , slide_buffer[i-2], slide_buffer[i-1]-1, slide_buffer[i-1], slide_buffer[i]-1, current_limit);
+
+            slide_buffer[i/2]= slide_buffer[i];
+        }
+
+        if(num_slides%2 == 1){
+            slide_buffer[(num_slides+1)/2] = slide_buffer[num_slides];
+        }
+
+        count ++;
+        num_slides = int(num_slides/2.0+0.5);
+
+    }
+
+    free(slide_buffer);
+}
+
+
+static void sortByDim(PointArray& V, int dim, PointArray& indices, PointArray& values) {
+
+    naturalMergeSort(V, dim, indices, values);
+
+}
+
+
+
+
+static void generateAndSort(int id, PointArray& vertices, PointArray* indices_sorted, PointArray* values_sorted, int dim)
+{
+    generatePointArray( *indices_sorted, vertices.width, 1);
+    generatePointArray( *values_sorted, vertices.width, 1);
+    
+    fillPointArrayWithSequence(*indices_sorted);
+
+    sortByDim( vertices, dim, *indices_sorted , *values_sorted);
 
 }
 

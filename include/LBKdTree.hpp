@@ -29,6 +29,8 @@ private:
 
     void generateKdTreeArray(PointArray& V, PointArray* sorted_indices, int max_dim, PointArray& kd_tree);
 
+    //void generateAndSort(int id, PointArray& vertices, PointArray* indices_sorted, PointArray* values_sorted, int dim);
+
     void sortByDim(PointArray& V, int dim, PointArray& indices, PointArray& values);
 
     void naturalMergeSort(PointArray& in, int dim, PointArray& indices,  PointArray& m, int limit=-1);

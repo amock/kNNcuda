@@ -1,33 +1,47 @@
 #include "LBKdTree.hpp"
 #include <stdio.h>
+#include <iostream>
 
 
 /// Public
 
 LBKdTree::LBKdTree(){
-    pool = std::shared_ptr<ctpl::thread_pool>(new ctpl::thread_pool(8) );
+    this->pool = std::shared_ptr<ctpl::thread_pool>(new ctpl::thread_pool(8) );
 }
 
 LBKdTree::LBKdTree( PointArray& vertices) {
+    this->pool = std::shared_ptr<ctpl::thread_pool>(new ctpl::thread_pool(8) );
     this->generateKdTree(vertices);
 }
+
+// void LBKdTree::generateAndSort(int id, PointArray& vertices, PointArray* indices_sorted, PointArray* values_sorted, int dim)
+// {
+//     std::cout << "Dim " << dim << std::endl;
+//     generatePointArray(*indices_sorted, vertices.width, 1);
+//     generatePointArray(*values_sorted, vertices.width, 1);
+    
+//     fillPointArrayWithSequence(*indices_sorted);
+    
+//     this->sortByDim( vertices, dim, *indices_sorted , *values_sorted);
+// }
 
 void LBKdTree::generateKdTree(PointArray &vertices) {
     struct PointArray indices_sorted[ vertices.dim ];
     struct PointArray values_sorted[ vertices.dim ];
 
-    for(int i=0; i < vertices.dim; i++)
+    // 3 dims in threads!
+    //this->p.push(addFloatPointerRec, vec_a.get(), vec_b.get(), vec_res_thr.get(), 0, vec_size);
+
+    std::cout << "Pre sort vertices" << std::endl;
+
+    for(int i=0; i< vertices.dim; i++)
     {
-        generatePointArray(indices_sorted[i], vertices.width, 1);
-
-        generatePointArray(values_sorted[i], vertices.width, 1);
-
-        fillPointArrayWithSequence(indices_sorted[i]);
-
-        this->sortByDim( vertices, i, indices_sorted[i] , values_sorted[i]);
+        this->pool->push(generateAndSort, vertices, &(indices_sorted[i]), &(values_sorted[i]), i);
     }
-
-    //this->pool.stop(true);
+    
+    this->pool->stop(true);
+    
+    std::cout << "Kd tree" << std::endl;
 
     this->generateKdTreeArray(vertices, indices_sorted, vertices.dim, this->kd_tree);
 
@@ -43,7 +57,6 @@ PointArray LBKdTree::getKdTreeArray() {
 }
 
 /// Private
-
 
 void LBKdTree::generateKdTreeArray(PointArray& V, PointArray* sorted_indices, int max_dim, PointArray& kd_tree) {
 
