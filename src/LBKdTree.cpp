@@ -5,27 +5,17 @@
 // Static variables
 
 ctpl::thread_pool* LBKdTree::pool = new ctpl::thread_pool(8);
+int LBKdTree::st_num_threads = 8;
+int LBKdTree::st_depth_threads = 3;
 
 /// Public
 
-LBKdTree::LBKdTree(){
-
-}
-
-LBKdTree::LBKdTree( PointArray& vertices) {
+LBKdTree::LBKdTree( PointArray& vertices, int num_threads) {
+    st_num_threads = num_threads;
+    st_depth_threads = static_cast<int>(log2(st_num_threads));
+    pool = new ctpl::thread_pool(st_num_threads);
     this->generateKdTree(vertices);
 }
-
-// void LBKdTree::generateAndSort(int id, PointArray& vertices, PointArray* indices_sorted, PointArray* values_sorted, int dim)
-// {
-//     std::cout << "Dim " << dim << std::endl;
-//     generatePointArray(*indices_sorted, vertices.width, 1);
-//     generatePointArray(*values_sorted, vertices.width, 1);
-    
-//     fillPointArrayWithSequence(*indices_sorted);
-    
-//     this->sortByDim( vertices, dim, *indices_sorted , *values_sorted);
-// }
 
 void LBKdTree::generateKdTree(PointArray &vertices) {
     struct PointArray indices_sorted[ vertices.dim ];
@@ -34,18 +24,14 @@ void LBKdTree::generateKdTree(PointArray &vertices) {
     // 3 dims in threads!
     //this->p.push(addFloatPointerRec, vec_a.get(), vec_b.get(), vec_res_thr.get(), 0, vec_size);
 
-    std::cout << "Pre sort vertices" << std::endl;
-
     for(int i=0; i< vertices.dim; i++)
     {
         pool->push(generateAndSort, vertices, &(indices_sorted[i]), &(values_sorted[i]), i);
     }
     
     pool->stop(true);
-    pool = new ctpl::thread_pool(8);
+    pool = new ctpl::thread_pool(st_num_threads);
     
-    std::cout << "Kd tree" << std::endl;
-
     this->generateKdTreeArray(vertices, indices_sorted, vertices.dim, this->kd_tree);
 
     for(int i=0; i<vertices.dim;i++)
@@ -83,7 +69,7 @@ void LBKdTree::generateKdTreeArray(PointArray& V, PointArray* sorted_indices, in
     //pool->push(generateKdTreeRecursive, V, sorted_indices, 0, max_dim, kd_tree, size, max_tree_depth, 0, 0);
 
     pool->stop(true);
-    pool = new ctpl::thread_pool(8);
+    pool = new ctpl::thread_pool(st_num_threads);
 }
 
 void LBKdTree::generateKdTreeRecursive(int id, PointArray& V, PointArray sorted_indices[], int current_dim, int max_dim, PointArray& kd_tree, int size, int max_tree_depth, int position, int current_depth) {
@@ -140,8 +126,9 @@ void LBKdTree::generateKdTreeRecursive(int id, PointArray& V, PointArray sorted_
         int next_dim = (current_dim+1)%max_dim;
         
         // thread pool when split
-        // 6 is good
-        if(current_depth < 8){
+        // on depth 2 you can use 8 threads
+        if(current_depth == st_depth_threads )
+        {
             pool->push(generateKdTreeRecursive, V, sorted_indices_left, next_dim, max_dim, kd_tree, size, max_tree_depth, left, current_depth + 1);
             pool->push(generateKdTreeRecursive, V, sorted_indices_right, next_dim, max_dim, kd_tree, size, max_tree_depth, right, current_depth +1);
         } else {

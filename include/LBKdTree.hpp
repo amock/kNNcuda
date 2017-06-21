@@ -15,9 +15,8 @@
  */
 class LBKdTree {
 public:
-    LBKdTree();
 
-    LBKdTree( PointArray& vertices );
+    LBKdTree( PointArray& vertices , int num_threads=8);
 
     void generateKdTree( PointArray& vertices );
 
@@ -39,13 +38,18 @@ private:
     void mergeHostWithIndices(float* a, float* b, int i1, int j1, int i2, int j2, int limit=-1);
 
     PointArray kd_tree;
+    
+
+    // Static member
+
+    static int st_num_threads;
+    static int st_depth_threads;
 
     static ctpl::thread_pool *pool;
 
     static void generateKdTreeRecursive(int id, PointArray& V, PointArray* sorted_indices, int current_dim, int max_dim, PointArray& kd_tree, int size, int max_tree_depth, int position, int current_depth);
 
     static void test(int id, PointArray* sorted_indices);
-
     
 
 };

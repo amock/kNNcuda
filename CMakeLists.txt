@@ -110,13 +110,14 @@ target_link_libraries(cudaNormals
 
 
 ###### ADD YOUR CODE HERE #######
-add_executable(Example src/main.cpp ext/rply/rply.c)
 
-target_link_libraries(Example
+add_executable(NormalsCuda src/main.cpp ext/rply/rply.c)
+
+target_link_libraries(NormalsCuda
 	cudaNormals
 )
 
-target_compile_features(Example PRIVATE cxx_range_for)
+target_compile_features(NormalsCuda PRIVATE cxx_range_for)
 
 add_executable(PoolTest src/pool_test.cpp)
 
