@@ -78,9 +78,9 @@ void LBKdTree::generateKdTreeArray(PointArray& V, PointArray* sorted_indices, in
     generatePointArray(kd_tree, size, 1);
 
     //start real generate
-    //generateKdTreeRecursive(0, V, sorted_indices, 0, max_dim, kd_tree, size, max_tree_depth, 0);
+    generateKdTreeRecursive(0, V, sorted_indices, 0, max_dim, kd_tree, size, max_tree_depth, 0, 0);
 
-    pool->push(generateKdTreeRecursive, V, sorted_indices, 0, max_dim, kd_tree, size, max_tree_depth, 0, 0);
+    //pool->push(generateKdTreeRecursive, V, sorted_indices, 0, max_dim, kd_tree, size, max_tree_depth, 0, 0);
 
     pool->stop(true);
     pool = new ctpl::thread_pool(8);
@@ -140,7 +140,8 @@ void LBKdTree::generateKdTreeRecursive(int id, PointArray& V, PointArray sorted_
         int next_dim = (current_dim+1)%max_dim;
         
         // thread pool when split
-        if(current_depth < 2){
+        // 6 is good
+        if(current_depth < 8){
             pool->push(generateKdTreeRecursive, V, sorted_indices_left, next_dim, max_dim, kd_tree, size, max_tree_depth, left, current_depth + 1);
             pool->push(generateKdTreeRecursive, V, sorted_indices_right, next_dim, max_dim, kd_tree, size, max_tree_depth, right, current_depth +1);
         } else {
