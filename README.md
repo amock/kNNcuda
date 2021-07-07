@@ -1,4 +1,16 @@
-<h1>Softwarename: cudaNormals</h1>
+<h1>DEPRECATED</h1>
+
+Moved to Las-Vegas-Reconstruction-Toolkit (Surface Reconstruction from PointClouds). Link: https://github.com/uos/lvr2. 
+
+Improvements:
+- Bugfixes
+- Improved Cuda implementation
+- OpenCl port
+
+LVR2 builds the executables `lvr2_cuda_normals` and `lvr2_cl_normals` which use normal the estimation on GPU in minimal form.
+
+
+<h1>OLD Softwarename: cudaNormals</h1>
 <br>
 <h1> k - Nearest Neighbor Search on Pointclouds for normal estimation with CUDA. </h1>
 
